@@ -85,6 +85,12 @@ export function normalizeCard(a) {
   }
   // 返事の中で、このカードを出したい言葉（画面は、読み上げがこの言葉を含む文に来たときに出す）
   if (a.say) data.say = String(a.say).slice(0, 60);
+  // どのカードにも付けられるリンク（公式サイト・情報元など。画面ではボタンになり、引っ張り出してピン留めもできる）
+  const links = (Array.isArray(a.links) ? a.links : [])
+    .slice(0, 6)
+    .map((x) => ({ title: String(x?.title ?? "").slice(0, 60), url: isUrl(x?.url) ? x.url : "" }))
+    .filter((x) => x.title && x.url);
+  if (links.length) data.links = links;
   return { kind, title, data };
 }
 
@@ -199,8 +205,8 @@ async function addImages(card) {
 
 export async function showCard(a) {
   // 何枚かをまとめて出せる（cards に並べる）。道具を 1 回で済ませると、返事が早く終わる
-  // 1 回で 6 枚まで（施設の候補 5 か所＋地図 1 枚を、まとめて出せるように）
-  const list = (Array.isArray(a.cards) && a.cards.length ? a.cards : [a]).slice(0, 6).map(normalizeCard);
+  // 1 回で 12 枚まで（利用者の希望: 話した中身ごとにカードを、画面が埋まるくらい出す）
+  const list = (Array.isArray(a.cards) && a.cards.length ? a.cards : [a]).slice(0, 12).map(normalizeCard);
   const raw = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const key = process.env.SUPABASE_SECRET_KEY?.trim();
   const owner = process.env.DIMY_OWNER_ID;

@@ -55,8 +55,12 @@ describe("左右の列と、好きな場所", () => {
   it("好きな場所に置いたカードは列に入れない。ほかは右・左の互い違い", () => {
     const c = (id: string, float?: { x: number; y: number; w: number }) => ({ id, kind: "text" as const, title: id, data: {}, pinned: false, at: 0, float });
     const r = splitColumns([c("a"), c("x", { x: 0, y: 0, w: 300 }), c("b"), c("c")]);
-    expect(r.right.map((x) => x.id)).toEqual(["a", "c"]);
-    expect(r.left.map((x) => x.id)).toEqual(["b"]);
+    expect(r.right[0].map((x) => x.id)).toEqual(["a", "c"]);
+    expect(r.left[0].map((x) => x.id)).toEqual(["b"]);
+    // 左右 2 列ずつ: 右の内側・左の内側・右の外側・左の外側…
+    const r2 = splitColumns(["1", "2", "3", "4", "5"].map((id) => c(id)), 2);
+    expect(r2.right.map((col) => col.map((x) => x.id))).toEqual([["1", "5"], ["3"]]);
+    expect(r2.left.map((col) => col.map((x) => x.id))).toEqual([["2"], ["4"]]);
   });
   it("画面の中に収める", () => {
     expect(clampFloat({ x: 5000, y: -50, w: 3000 }, 1920, 1080)).toEqual({ x: 1800, y: 8, w: 1904, h: undefined });

@@ -7,6 +7,8 @@ export type CardData = {
   places?: { name: string; query: string; note?: string; from?: string }[];
   /** image: 言葉で探した写真（PC の DIMY が Wikimedia Commons から探して書き足す） */
   images?: { url: string; title: string; page: string }[];
+  /** どのカードにも付けられるリンク（公式サイト・情報元など） */
+  links?: { title: string; url: string }[];
   /** 返事の中で、このカードを出したい言葉（読み上げがこの言葉を含む文に来たら出す。「|」で言い換えを並べられる） */
   say?: string;
   count?: number;
@@ -41,12 +43,18 @@ export type Card = {
   float?: { x: number; y: number; w: number; h?: number };
 };
 
-/** 列に並べるカードを左右に分ける（右・左の互い違い）。好きな場所に置いたカードは除く */
-export function splitColumns(cards: Card[]): { left: Card[]; right: Card[] } {
-  const left: Card[] = [];
-  const right: Card[] = [];
+/** 列に並べるカードを左右に分ける（右・左の互い違い）。好きな場所に置いたカードは除く。
+ * perSide = 2 のときは、右の内側・左の内側・右の外側・左の外側の順に配る（カードが多いとき、画面いっぱいに並べるため） */
+export function splitColumns(cards: Card[], perSide = 1): { left: Card[][]; right: Card[][] } {
+  const left: Card[][] = Array.from({ length: perSide }, () => []);
+  const right: Card[][] = Array.from({ length: perSide }, () => []);
   let n = 0;
-  for (const c of cards) if (!c.float) (n++ % 2 === 0 ? right : left).push(c);
+  for (const c of cards) {
+    if (c.float) continue;
+    const i = n++;
+    const col = Math.floor(i / 2) % perSide;
+    (i % 2 === 0 ? right : left)[col].push(c);
+  }
   return { left, right };
 }
 

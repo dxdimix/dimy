@@ -11,7 +11,7 @@
 //   画面の中の好きな場所に置け、右下の角で大きさを変えられる（利用者の決まり）
 // - カードは、周りのボタンや表記（右上のボタン・左のアイコン・日時・天気・SYSTEM・LOG・字幕・マイク）より後ろに出す
 
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
 import { CARD_DRAG_TYPE, clampFloat, emphasize, googleImagesUrl, splitColumns, mapDirUrl, mapEmbedUrl, mapOpenUrl, youtubeEmbed, youtubeId } from "@/lib/cards";
@@ -61,6 +61,19 @@ function dragOut(payload: CardDrag) {
   };
 }
 
+const WIDE = "(min-width: 1600px)";
+function useWide() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(WIDE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => false,
+  );
+}
+
 const NARROW = "(max-width: 767px)";
 function useNarrow() {
   return useSyncExternalStore(
@@ -81,6 +94,7 @@ const COLUMN_BASE: CSSProperties = { top: "6.5rem", maxHeight: "calc(100dvh - 6.
 
 export function Showcase(p: Props) {
   const narrow = useNarrow();
+  const wide = useWide();
   const { onExtract } = p;
   // カードの中のリンクを、元のカードの外で離したら、それだけのカードを作る（残す）
   useEffect(() => {
@@ -193,13 +207,17 @@ export function Showcase(p: Props) {
   if (!p.cards.length) return null;
   // スマホでは、会話のカードだけを大きく出し、ほかは小さなカードの一覧にする（押すとページ・地図のアプリを開く。利用者の決まり）
   const floats = p.cards.filter((c) => c.float && (!narrow || c.kind === "chat")).sort((a, b) => a.at - b.at);
-  const column = (list: Card[], side: "left" | "right" | "top") => {
+  // カードが多いとき（4 枚より多く、画面が広いとき）は、左右それぞれ 2 列にして画面いっぱいに並べる（利用者の希望）
+  const perSide = wide && p.cards.filter((c) => !c.float).length > 4 ? 2 : 1;
+  const colW = perSide === 2 ? `calc((50% - ${INNER} - 96px) / 2)` : COLUMN_BASE.width;
+  const column = (list: Card[], side: "left" | "right" | "top", j = 0) => {
+    const offset = j === 0 ? INNER : `${INNER} + ${colW} + 16px`;
     const style: CSSProperties =
       side === "top"
         ? { top: "11.75rem", left: 12, right: 12, maxHeight: "calc(100dvh - 11.75rem - 17rem)" }
         : side === "right"
-          ? { ...COLUMN_BASE, left: `calc(50% + ${INNER})` }
-          : { ...COLUMN_BASE, right: `calc(50% + ${INNER})` };
+          ? { ...COLUMN_BASE, width: colW, left: `calc(50% + ${offset})` }
+          : { ...COLUMN_BASE, width: colW, right: `calc(50% + ${offset})` };
     return (
       <div style={style} className="pointer-events-none absolute z-[700] flex flex-col gap-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:thin]">
         {list.map((c) => (
@@ -228,8 +246,12 @@ export function Showcase(p: Props) {
         <CompactList {...p} cards={p.cards.filter((c) => c.kind !== "chat")} />
       ) : (
         <>
-          {column(splitColumns(p.cards).right, "right")}
-          {column(splitColumns(p.cards).left, "left")}
+          {splitColumns(p.cards, perSide).right.map((list, j) => (
+            <Fragment key={`r${j}`}>{column(list, "right", j)}</Fragment>
+          ))}
+          {splitColumns(p.cards, perSide).left.map((list, j) => (
+            <Fragment key={`l${j}`}>{column(list, "left", j)}</Fragment>
+          ))}
         </>
       )}
       <button
@@ -270,6 +292,16 @@ function CompactList(p: Props & { cards: Card[] }) {
             </button>
           </div>
           <CompactBody card={card} open={open} weather={p.weather} session={p.session} all={opened.has(card.id)} />
+          {!!card.data.links?.length && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {card.data.links.map((l, i) => (
+                <button key={i} onClick={() => open(l.url, l.title)} className="flex max-w-full items-center gap-1 rounded-full border border-cyan-400/40 px-2.5 py-1 text-xs text-cyan-100 active:bg-cyan-400/10">
+                  <ExternalIcon className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{l.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {!opened.has(card.id) && (card.data.items?.length ?? card.data.places?.length ?? 0) > 2 && (
             <button onClick={() => setOpened((s) => new Set(s).add(card.id))} className="mt-1 w-full rounded py-1 text-xs text-cyan-300 active:bg-cyan-400/10">
               ほか {(card.data.items?.length ?? card.data.places?.length ?? 0) - 2} 件を見る
@@ -805,6 +837,7 @@ export function CardBody({
           </div>
         </div>
       )}
+      {!!card.data.links?.length && <LinkChips card={card} onOpenLink={onOpenLink} />}
     </>
   );
 }
@@ -872,6 +905,30 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** カードのリンク（公式サイト・情報元など）。押すと開く。カードの外へ引っ張り出すと、そのページのカードにしてピン留めできる */
+function LinkChips({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, title: string) => void }) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {card.data.links!.map((l, i) => (
+        <button
+          key={i}
+          onClick={() => onOpenLink(l.url, l.title)}
+          {...dragOut(
+            hasDimyExtension()
+              ? { from: card.id, kind: "web", title: l.title, data: { url: l.url } }
+              : { from: card.id, kind: "page", title: l.title, data: { url: l.url } },
+          )}
+          title={`${l.url}（押すと開きます。カードの外へドラッグすると、このページのカードにして残します）`}
+          className="flex max-w-full items-center gap-1.5 rounded-full border border-cyan-400/40 bg-cyan-400/5 px-3 py-1 text-sm text-cyan-100 hover:border-cyan-300/80 hover:bg-cyan-400/15"
+        >
+          <ExternalIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{l.title}</span>
+        </button>
+      ))}
     </div>
   );
 }
