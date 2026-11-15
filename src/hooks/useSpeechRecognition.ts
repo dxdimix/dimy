@@ -38,7 +38,10 @@ const ERROR_MESSAGES: Record<string, string> = {
  * 話している途中の文字は interim で見られる。
  * 注意: Chrome / Edge の音声認識は、音声をブラウザの提供元（Google / Microsoft）のサーバーに送って文字にする。
  */
-export function useSpeechRecognition(onFinal: (text: string) => void, opts: { silenceMs?: number } = {}) {
+export function useSpeechRecognition(
+  onFinal: (text: string) => void,
+  opts: { silenceMs?: number; onLog?: (kind: string, detail: string) => void } = {},
+) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
@@ -51,8 +54,10 @@ export function useSpeechRecognition(onFinal: (text: string) => void, opts: { si
   }, [onFinal]);
   // 話し終わりとみなすまでの無音の時間（設定で変えられる）
   const silenceMs = useRef(opts.silenceMs ?? 1500);
+  const onLog = useRef(opts.onLog);
   useEffect(() => {
     silenceMs.current = opts.silenceMs ?? 1500;
+    onLog.current = opts.onLog;
   });
 
   useEffect(() => {
@@ -91,6 +96,7 @@ export function useSpeechRecognition(onFinal: (text: string) => void, opts: { si
       arm(silenceMs.current);
     };
     rec.onerror = (e) => {
+      onLog.current?.("rec_error", `聞き取りのエラー（マイクのボタン）: ${e.error}`);
       if (e.error !== "no-speech" && e.error !== "aborted") setError(ERROR_MESSAGES[e.error] ?? `音声認識のエラー: ${e.error}`);
     };
     rec.onend = () => {
@@ -99,10 +105,15 @@ export function useSpeechRecognition(onFinal: (text: string) => void, opts: { si
       setListening(false);
       setInterim("");
       const text = finalText.trim();
+      onLog.current?.(
+        "heard",
+        discard.current ? `マイクのボタン: 取り消し（${text || "言葉なし"}）` : text ? `マイクのボタン: 聞き取った「${text}」` : "マイクのボタン: 何も聞き取れなかった",
+      );
       if (text && !discard.current) onFinalRef.current(text);
       discard.current = false;
     };
     recRef.current = rec;
+    onLog.current?.("listen", "マイクのボタン: 聞き取りを始めた");
     setError("");
     setListening(true);
     rec.start();

@@ -35,4 +35,11 @@ export const ACTIVITY_LABEL: Record<string, string> = {
   wake: "呼びかけ",
   hotkey: "右 Ctrl 2 回",
   error: "エラー",
+  heard: "聞き取った",
+  ignored: "聞き流した",
+  listen: "聞き取り",
+  rec_error: "聞き取りのエラー",
+  speak: "読み上げ",
+  send: "DIMY に送った",
+  ui: "画面",
 };

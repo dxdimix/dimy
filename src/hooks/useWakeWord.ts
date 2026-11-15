@@ -20,7 +20,8 @@ export function useWakeWord(o: {
   enabled: boolean;
   speaking: boolean; // ディミが話している間は、止める言葉（ストップなど）だけを聞く
   paused?: boolean; // マイクのボタンで聞いている間など、こちらの聞き取りを止める
-  isEcho?: (text: string) => boolean; // ディミ自身が話した声を拾ったものか（拾ったものは無視する）
+  isEcho?: (text: string) => boolean;
+  onLog?: (kind: string, detail: string) => void; // 記録（管理の画面の「動作」に残す） // ディミ自身が話した声を拾ったものか（拾ったものは無視する）
   onWake: () => void; // 呼ばれた（「はい」と答える）
   onCommand: (text: string) => void; // 話しかけられた内容
   onControl: (c: Control) => void; // 終わり・聞かないで・取り消し
@@ -61,6 +62,7 @@ export function useWakeWord(o: {
     if (s === "command" || s === "followup") {
       const ms = s === "followup" ? (cb.current.followMs ?? WINDOW_MS) : WINDOW_MS;
       timerRef.current = setTimeout(() => {
+        cb.current.onLog?.("listen", s === "followup" ? "続けて話せる時間が終わった（待機に戻る）" : "呼ばれたあと、話しかけられなかった（待機に戻る）");
         stateRef.current = "standby";
         setStateRaw("standby");
         setInterim("");
@@ -71,6 +73,7 @@ export function useWakeWord(o: {
   // 呼ばれた: すぐに合図の音を鳴らし、「はい」と答える
   const wakeUp = useCallback(() => {
     wokeAt.current = Date.now();
+    cb.current.onLog?.("wake", "「ディミ」と呼ばれた");
     setState("command");
     chime(cb.current.volume ?? 1);
     cb.current.onWake();
@@ -114,18 +117,32 @@ export function useWakeWord(o: {
       const s = stateRef.current;
       // 考えている間（返事を作っている・読み上げている間）は、止める言葉だけを受け付ける。
       // 「ディミ」も受け付けない（ディミが自分の名前を話したのを拾って、次の会話が始まってしまうため）
+      const log = cb.current.onLog;
       if (s === "busy") {
-        if (STOP_WORDS.test(raw) && !cb.current.isEcho?.(raw)) cb.current.onControl("stop");
+        if (STOP_WORDS.test(raw) && !cb.current.isEcho?.(raw)) {
+          log?.("heard", `止める言葉を聞いた「${raw}」`);
+          cb.current.onControl("stop");
+        } else log?.("ignored", `考え中・話し中なので無視「${raw}」`);
         return;
       }
       // 自分の声を拾ったものは無視する
-      if (s !== "standby" && cb.current.isEcho?.(raw)) return;
+      if (s !== "standby" && cb.current.isEcho?.(raw)) {
+        log?.("ignored", `DIMY 自身の声とみなして無視「${raw}」`);
+        return;
+      }
       // 呼ばれた直後に聞こえた「はい」は、ディミ自身の声なので無視する
-      if (s === "command" && Date.now() - wokeAt.current < 2500 && /^(はい|ハイ)[。、！!]?$/.test(raw.trim())) return;
+      if (s === "command" && Date.now() - wokeAt.current < 2500 && /^(はい|ハイ)[。、！!]?$/.test(raw.trim())) {
+        log?.("ignored", "直後の「はい」は DIMY 自身の声とみなして無視");
+        return;
+      }
       const woke = parseWake(raw);
       let text = raw.trim();
       if (s === "standby") {
-        if (woke === null) return; // 呼びかけでなければ無視
+        // 呼びかけでなければ無視（周りの会話を残さないよう、中身は記録しない）
+        if (woke === null) {
+          log?.("ignored", `待機中に呼びかけ以外の言葉を聞いた（${raw.trim().length} 文字・中身は残さない）`);
+          return;
+        }
         if (woke === "") {
           wakeUp();
           return;
@@ -138,6 +155,7 @@ export function useWakeWord(o: {
         text = woke;
       }
       // すぐには送らず、ためておく（続きがあればつなげる）
+      log?.("heard", `聞き取った「${text}」（話し終わりを待つ）`);
       bufferRef.current += text;
       liveRef.current = "";
       armSilence();
@@ -165,6 +183,7 @@ export function useWakeWord(o: {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const t = e.results[i][0].transcript;
           if (STOP_WORDS.test(t) && !cb.current.isEcho?.(t)) {
+            cb.current.onLog?.("heard", `話している途中に止める言葉を聞いた「${t}」`);
             cb.current.onControl("stop");
             return;
           }
@@ -194,6 +213,7 @@ export function useWakeWord(o: {
       setError("");
     };
     rec.onerror = (e) => {
+      if (e.error !== "no-speech" && e.error !== "aborted") cb.current.onLog?.("rec_error", `聞き取りのエラー（呼びかけ）: ${e.error}`);
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         setError("マイクの使用が許可されていません。アドレス欄の左のアイコンから、マイクを許可してください。");
         stopped = true;

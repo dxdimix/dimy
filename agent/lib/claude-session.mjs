@@ -182,6 +182,8 @@ export class ClaudeSession {
       const e = ev.event;
       // 道具（Web 検索など）を使う前後で文章が複数の塊に分かれるので、塊の間に空行を入れてつなぐ。
       // 道具を使う前と後で同じ文を繰り返すことがあるので、前の塊に含まれている塊は出さない（読み上げが 2 回になるため）。
+      // 道具を使い始めたら知らせる（記録に残すため）
+      if (e?.type === "content_block_start" && e.content_block?.type === "tool_use") this.options.onTool?.(e.content_block.name);
       if (e?.type === "content_block_start" && e.content_block?.type === "text") {
         p.blocks.push("");
       } else if (e?.type === "content_block_delta" && e.delta?.type === "text_delta") {

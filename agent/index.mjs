@@ -122,6 +122,8 @@ const claude = new ClaudeSession({
   addDirs: [path.join(ROOT, "docs"), ...(DEV_DIR && fs.existsSync(DEV_DIR) ? [DEV_DIR] : [])],
   cwd: WORKDIR,
   systemPromptFile: PERSONA_FILE,
+  // 使った道具を記録に残す（Google カレンダー・Chrome で開く・Web 検索など）
+  onTool: (name) => log(`道具を使いました: ${name}`),
   timeoutMs: TIMEOUT_MS,
 });
 
@@ -259,7 +261,7 @@ async function handle(message) {
   if (claimError) throw claimError;
   if (!claimed) return;
 
-  log("発言を受け取りました。返事を作っています…");
+  log(`発言を受け取りました「${String(claimed.content).replace(/\s+/g, " ").slice(0, 300)}」。返事を作っています…`);
   const started = Date.now();
   const writer = createReplyWriter(claimed);
   try {
@@ -298,6 +300,7 @@ async function handle(message) {
     if (!reply) throw new Error("返事が空でした。");
 
     await writer.finish(reply);
+    log(`返事「${reply.replace(/\s+/g, " ").slice(0, 300)}」`);
     await supabase.from("messages").update({ status: "done" }).eq("id", claimed.id);
     const sec = (ms) => (ms / 1000).toFixed(1);
     log(`返事をしました（書き始め ${sec(firstAt - started)} 秒 / 完了 ${sec(Date.now() - started)} 秒）`);

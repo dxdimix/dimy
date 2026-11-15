@@ -123,6 +123,8 @@ export function startAutoUpdate(o) {
     try {
       if (!latest) {
         const found = await findLatest(o.repos);
+        if (!found) o.log("新しい版を確かめられませんでした（GitHub に届かない）。");
+        else if (found.sha === current) o.log(`新しい版はありません（今の版 ${current.slice(0, 7)}）。`);
         if (found && found.sha !== current) {
           latest = found.sha;
           latestRepo = found.repo;

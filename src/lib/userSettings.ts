@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Chrome のアカウントの呼び名（{ プロフィールのフォルダ名: 呼び名 }） */
 export const NICKNAMES_KEY = "account_nicknames";
+/** サイトごとに開く Chrome のプロフィール（{ サイト名: フォルダ名 }。"*" はそれ以外） */
+export const SITE_ACCOUNTS_KEY = "site_accounts";
 
 export async function loadUserSetting<T>(supabase: SupabaseClient, key: string): Promise<{ value: T | null; error?: string }> {
   const { data, error } = await supabase.from("user_settings").select("value").eq("key", key).maybeSingle();

@@ -16,6 +16,7 @@ import { useAgentOnline } from "@/hooks/useAgentOnline";
 import { useSpeaker } from "@/hooks/useSpeaker";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useWakeWord } from "@/hooks/useWakeWord";
+import { useAutoReload } from "@/hooks/useAutoReload";
 import { useActiveDevice } from "@/hooks/useActiveDevice";
 import { isEcho, toSpeech } from "@/lib/wake";
 import {
@@ -29,7 +30,7 @@ import {
   stripBrowser,
 } from "@/lib/commands";
 import { loadPcState, sendPcCommand, type PcState } from "@/lib/pc";
-import { loadUserSetting, NICKNAMES_KEY, saveUserSetting } from "@/lib/userSettings";
+import { loadUserSetting, NICKNAMES_KEY, saveUserSetting, SITE_ACCOUNTS_KEY as SHARED_SITE_ACCOUNTS_KEY } from "@/lib/userSettings";
 import { boardLabel, loadPins, savePins, sendPin } from "@/lib/pins";
 import { Chat } from "@/components/Chat";
 import { APPS, detectOpenCommand } from "@/lib/apps";
@@ -270,11 +271,15 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     (text: string) => {
       // 念のため: 同じ文を 5 秒以内に 2 回読まない
       const norm = (t: string) => t.replace(/[\s、。,.!！?？]/g, "");
-      if (recentSpoken.current.some((x) => Date.now() - x.at < 5_000 && norm(x.text) === norm(text))) return;
+      if (recentSpoken.current.some((x) => Date.now() - x.at < 5_000 && norm(x.text) === norm(text))) {
+        logActivity(supabase, "speak", `（同じ文を 5 秒以内に読もうとしたので読まなかった）${text}`);
+        return;
+      }
+      logActivity(supabase, "speak", text);
       recentSpoken.current = [...recentSpoken.current.filter((x) => Date.now() - x.at < 60_000), { text, at: Date.now() }];
       speakRaw(text);
     },
-    [speakRaw],
+    [speakRaw, supabase],
   );
 
   const appWins = useAppWindows();
@@ -323,12 +328,16 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     async (text: string) => {
       logActivity(supabase, "voice", text);
       if (await handleLocal(text)) return;
+      logActivity(supabase, "send", `画面で済ませる命令ではないので、PC の DIMY に送った「${text}」`);
       const { error } = await supabase.from("messages").insert({ role: "user", content: text });
       if (error) setError(`送信できませんでした: ${error.message}`);
     },
     [supabase, handleLocal],
   );
-  const recognition = useSpeechRecognition(handleUtterance, { silenceMs: silenceSec * 1000 });
+  const recognition = useSpeechRecognition(handleUtterance, {
+    silenceMs: silenceSec * 1000,
+    onLog: (kind, detail) => logActivity(supabase, kind, detail),
+  });
 
   // 「ディミ」と呼ばれたときだけ反応する聞き取り
   // 返事を作っている・届いている間（読み上げの合間も含めて、話している最中として扱う）
@@ -342,6 +351,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     speaking: speaker.speaking || replyActive,
     paused: recognition.listening,
     isEcho: (t) => recentSpoken.current.some((x) => Date.now() - x.at < 60_000 && isEcho(t, x.text)),
+    onLog: (kind, detail) => logActivity(supabase, kind, detail),
     followMs: followSec * 1000,
     silenceMs: silenceSec * 1000,
     volume: speaker.volume,
@@ -460,18 +470,27 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     setOpenOnRaw(v);
     save(OPEN_ON_KEY, v);
   };
+  // サイトごとのアカウントは、どの端末でも共通（表 user_settings）。
+  // 以前この端末のブラウザに保存していたものは、データベースにまだ何もなければ引き継ぐ
   useEffect(() => {
-    try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSiteAccounts(JSON.parse(load(SITE_ACCOUNTS_KEY) ?? "{}"));
-    } catch {}
-  }, []);
+    loadUserSetting<Record<string, string>>(supabase, SHARED_SITE_ACCOUNTS_KEY).then(({ value, error }) => {
+      if (value) return setSiteAccounts(value);
+      let local: Record<string, string> = {};
+      try {
+        local = JSON.parse(load(SITE_ACCOUNTS_KEY) ?? "{}");
+      } catch {}
+      setSiteAccounts(local);
+      if (!error && Object.keys(local).length) saveUserSetting(supabase, SHARED_SITE_ACCOUNTS_KEY, local);
+    });
+  }, [supabase]);
   const setSiteAccount = (site: string, dir: string | null) => {
     const next = { ...siteAccounts };
     if (dir) next[site] = dir;
     else delete next[site];
     setSiteAccounts(next);
     save(SITE_ACCOUNTS_KEY, JSON.stringify(next));
+    saveUserSetting(supabase, SHARED_SITE_ACCOUNTS_KEY, next).then((err) => err && logActivity(supabase, "error", `サイトごとのアカウントを保存できませんでした: ${err}`));
+    logActivity(supabase, "ui", `サイトごとのアカウント: ${site === "*" ? "それ以外" : site} → ${dir ?? "指定なし"}`);
   };
   // Chrome のアカウントの呼び名（表 user_settings。端末をまたいで同じものを使う）
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
@@ -661,6 +680,20 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   useEffect(() => {
     captionFollow.current = true;
   }, [lastReply?.id]);
+
+  // 記録: 画面に出たエラー・開いた画面（管理の画面の「動作」に残す）
+  const shownError = error || recognition.error || wake.error;
+  useEffect(() => {
+    if (shownError) logActivity(supabase, "error", shownError);
+  }, [shownError, supabase]);
+  useEffect(() => {
+    if (panel !== "none") logActivity(supabase, "ui", `開いた: ${panel}`);
+  }, [panel, supabase]);
+
+  // 新しい版の画面が公開されたら、話していない・何も開いていないときに読み込み直す
+  useAutoReload(mode === "idle" && !wakeListening && panel === "none" && !replyActive, (from, to) =>
+    logActivity(supabase, "ui", `新しい版の画面を読み込み直した（${from.slice(0, 7)} → ${to.slice(0, 7)}）`),
+  );
 
   function onMic() {
     cancelSpeech();

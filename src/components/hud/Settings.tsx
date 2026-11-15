@@ -372,7 +372,7 @@ function AccountTab(p: SettingsProps) {
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-slate-400">YouTube・Google の検索も、ここで決めたアカウントで開きます。この設定は、この端末のブラウザに保存されます。</p>
+            <p className="mt-1 text-xs text-slate-400">YouTube・Google の検索も、ここで決めたアカウントで開きます。この設定は、どの端末でも共通です。</p>
           </div>
         </>
       )}
