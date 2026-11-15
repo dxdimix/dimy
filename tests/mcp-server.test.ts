@@ -86,3 +86,11 @@ describe("地図のカード", () => {
     });
   });
 });
+
+describe("カードをまとめて出す", () => {
+  it("show_card は kind なしでも cards で呼べる", () => {
+    const t = TOOLS.find((x) => x.name === "show_card")!;
+    expect(t.inputSchema.required).toEqual([]);
+    expect(Object.keys(t.inputSchema.properties)).toContain("cards");
+  });
+});

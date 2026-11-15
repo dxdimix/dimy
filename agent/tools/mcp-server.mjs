@@ -39,10 +39,15 @@ export const TOOLS = [
       " / video = 動画（YouTube の url。画面の中で再生できる）/ stats = 大事な数字（stats に label・value・unit。例: 日経平均 / 38,500 / 円）" +
       " / map = 地図（places に name・query・note。query は Google マップで探す言葉＝施設名と市区町村、または住所。複数なら番号で切り替えられる）" +
       " / points = 要点や手順の図（points に短い文の配列。手順なら style: steps）/ page = ページ（url。見出し画像を自動で添える）/ image = 画像（画像そのものの url）/ text = 短い文（text）。" +
-      "場所・お店・施設・観光地の話では、list などと一緒に map も出す。文の中の大事な数字や言葉は **太字** で囲める。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
+      "場所・お店・施設・観光地の話では、list などと一緒に map も出す（cards で 1 回にまとめる）。文の中の大事な数字や言葉は **太字** で囲める。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
     inputSchema: {
       type: "object",
       properties: {
+        cards: {
+          type: "array",
+          description: "何枚かを 1 回で出すとき（最大 3 枚）。各要素は kind・title と、その種類の中身（items / places / url / stats / points / text など）。1 枚だけなら cards を使わず直接書いてよい。",
+          items: { type: "object" },
+        },
         kind: { type: "string", enum: ["list", "map", "video", "stats", "points", "page", "image", "text"] },
         title: { type: "string", description: "カードの見出し（短く）" },
         items: {
@@ -61,7 +66,7 @@ export const TOOLS = [
         note: { type: "string" },
         text: { type: "string" },
       },
-      required: ["kind", "title"],
+      required: [],
     },
     call: (a) => showCard(a),
   },
