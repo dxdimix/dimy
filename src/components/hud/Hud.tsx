@@ -679,20 +679,21 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [siteAccounts, setSiteAccounts] = useState<Record<string, string>>({});
   // 開く場所（端末ごと）。スマホは最初から「この端末」、それ以外は「PC の Chrome」
   const [openOn, setOpenOnRaw] = useState<"pc" | "here">("pc");
-  // 開く場所は端末ごとに違う（デスクトップは PC の Chrome、ノート・スマホはその端末）ので、端末の番号を付けた名前で保存する
-  const openOnKey = () => `device.${deviceId()}.openOn`;
+  // 開く場所は、どの端末でも共通（利用者の決まり: なるべくどこでも同じ環境に）。
+  // 以前の端末ごとの保存（device.<端末の番号>.openOn・ブラウザの dimy.openOn）は、共通の保存がまだなければ引き継ぐ
   useEffect(() => {
     let legacy: string | null = null;
     try {
       legacy = localStorage.getItem(OPEN_ON_KEY);
     } catch {}
-    const v = getPref(openOnKey()) ?? legacy;
+    const v = getPref("openOn") ?? getPref(`device.${deviceId()}.openOn`) ?? legacy;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpenOnRaw(v === "here" || v === "pc" ? v : window.matchMedia("(pointer: coarse)").matches ? "here" : "pc");
+    setOpenOnRaw(v === "here" || v === "pc" ? v : "pc");
   }, [prefsVersion]);
   const setOpenOn = (v: "pc" | "here") => {
     setOpenOnRaw(v);
-    setPref(openOnKey(), v);
+    setPref("openOn", v);
+    logActivity(supabase, "settings", `開く場所（どの端末でも共通）: ${v === "pc" ? "デスクトップ PC の Chrome" : "使っている端末のブラウザ"}`);
   };
   // サイトごとのアカウントは、どの端末でも共通（表 user_settings）。
   // 以前この端末のブラウザに保存していたものは、データベースにまだ何もなければ引き継ぐ

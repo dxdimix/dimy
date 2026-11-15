@@ -339,7 +339,7 @@ function AccountTab(p: SettingsProps) {
         {master ? `（${master.name}・${master.email}）` : ""}で開きます。
       </p>
       <div>
-        <div className="mb-1.5 text-cyan-100">この端末で頼んだときに開く場所</div>
+        <div className="mb-1.5 text-cyan-100">頼んだときに開く場所</div>
         <div className="space-y-1 text-xs">
           <label className="flex cursor-pointer items-start gap-2">
             <input type="radio" name="dimy-open-on" checked={p.openOn === "pc"} onChange={() => p.setOpenOn("pc")} className="mt-0.5 accent-cyan-400" />
@@ -351,12 +351,12 @@ function AccountTab(p: SettingsProps) {
           <label className="flex cursor-pointer items-start gap-2">
             <input type="radio" name="dimy-open-on" checked={p.openOn === "here"} onChange={() => p.setOpenOn("here")} className="mt-0.5 accent-cyan-400" />
             <span>
-              <span className="text-cyan-100">この端末のブラウザ</span>
-              <span className="block text-slate-400">ノートやスマホで使うとき向け。今このブラウザでログインしているアカウントで開きます（下のアカウントの設定は使いません）。</span>
+              <span className="text-cyan-100">使っている端末のブラウザ</span>
+              <span className="block text-slate-400">話しかけた端末（デスクトップ・ノート・スマホ）のブラウザで開きます。そのブラウザでログインしているアカウントで開きます（下のアカウントの設定は使いません）。</span>
             </span>
           </label>
         </div>
-        <p className="mt-1 text-xs text-slate-400">この設定は端末ごとです。ノートでは「この端末のブラウザ」を選んでください。</p>
+        <p className="mt-1 text-xs text-slate-400">この設定は、どの端末でも共通です。</p>
       </div>
       {p.profiles === null ? (
         <p className="text-slate-400">PC の情報がまだ届いていません（PC の DIMY が動いていれば、数分で出ます）。</p>

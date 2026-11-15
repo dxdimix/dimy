@@ -15,7 +15,7 @@ type Prefs = Record<string, string>;
 const DB_KEY = "prefs";
 const CACHE = "dimy.prefs";
 // 以前ブラウザに置いていたもののうち、設定ではないもの（引き継がない）
-const NOT_PREFS = new Set(["prefs", "voiceTab", "deviceId", "openOn"]); // openOn は端末ごとの名前で別に持つ
+const NOT_PREFS = new Set(["prefs", "voiceTab", "deviceId", "openOn"]); // openOn は Hud が共通の名前（openOn）へ引き継ぐ
 
 let prefs: Prefs = {};
 let client: SupabaseClient | null = null;
