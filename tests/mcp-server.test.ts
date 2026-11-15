@@ -132,3 +132,10 @@ describe("話に合わせて出す言葉", () => {
     expect(normalizeCard({ kind: "stats", title: "料金", say: "料金", stats: [{ label: "小学生", value: "3,200", unit: "円" }] }).data.say).toBe("料金");
   });
 });
+
+describe("どのカードにも写真", () => {
+  it("数字のカードにも写真の URL を残す", () => {
+    expect(normalizeCard({ kind: "stats", title: "料金", image: "https://e.com/a.jpg", stats: [{ label: "大人", value: "1" }] }).data.image).toBe("https://e.com/a.jpg");
+    expect(normalizeCard({ kind: "points", title: "x", image: "javascript:1", points: ["a"] }).data.image).toBeUndefined();
+  });
+});

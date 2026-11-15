@@ -21,6 +21,8 @@ import { getPref } from "@/lib/prefs";
 import { hasDimyExtension, WEB_FRAME_SANDBOX } from "@/lib/extension";
 
 const TZ = "Asia/Tokyo";
+/** 上に写真を出すカード（ほかの種類は、それぞれの形で写真を出す） */
+const PHOTO_KINDS = ["stats", "points", "text"];
 
 type Props = {
   cards: Card[];
@@ -291,6 +293,9 @@ function CompactList(p: Props & { cards: Card[] }) {
               <CloseIcon className="h-5 w-5" />
             </button>
           </div>
+          {PHOTO_KINDS.includes(card.kind) && card.data.image && (
+            <Photo src={card.data.image} alt={card.data.links?.[0]?.url ?? card.title} className="mb-1.5 h-24 w-full rounded" />
+          )}
           <CompactBody card={card} open={open} weather={p.weather} session={p.session} all={opened.has(card.id)} />
           {!!card.data.links?.length && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -746,6 +751,10 @@ export function CardBody({
 }) {
   return (
     <>
+      {/* 数字・要点・文のカードにも、話の中身が伝わる写真を上に出す（利用者の希望: 文字だけだと見づらい） */}
+      {PHOTO_KINDS.includes(card.kind) && card.data.image && (
+        <Photo src={card.data.image} alt={card.data.links?.[0]?.url ?? card.title} className="mb-3 aspect-[16/7] w-full rounded-lg" />
+      )}
       {card.kind === "weather" && <WeatherCard weather={weather} place={place} />}
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}

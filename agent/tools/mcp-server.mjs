@@ -84,7 +84,7 @@ export const TOOLS = [
         points: { type: "array", items: { type: "string" } },
         style: { type: "string", enum: ["points", "steps"] },
         url: { type: "string" },
-        image: { type: "string" },
+        image: { type: "string", description: "どのカードにも付けられる写真の URL（話の中身が伝わる写真）。なければ links のページの見出し画像を自動で添える" },
         note: { type: "string" },
         text: { type: "string" },
       },

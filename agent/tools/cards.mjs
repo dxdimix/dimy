@@ -91,6 +91,9 @@ export function normalizeCard(a) {
     .map((x) => ({ title: String(x?.title ?? "").slice(0, 60), url: isUrl(x?.url) ? x.url : "" }))
     .filter((x) => x.title && x.url);
   if (links.length) data.links = links;
+  // どのカードにも付けられる写真（話の中身が伝わる写真。利用者の希望: 文字だけだと見づらい）。
+  // なければ、PC の DIMY がリンクのページの見出し画像を探して、あとから添える
+  if (!data.image && isUrl(a.image) && kind !== "list" && kind !== "image") data.image = a.image;
   return { kind, title, data };
 }
 
@@ -192,6 +195,15 @@ async function addImages(card) {
         if (!it.image && it.url) it.image = await findPageImage(it.url);
       }),
     );
+  } else if (PHOTO_FROM_LINK.includes(card.kind) && !card.data.image && card.data.links?.[0]?.url) {
+    // リンクを上から順に試し、最初に見つかった見出し画像を使う
+    for (const l of card.data.links.slice(0, 3)) {
+      const img = await findPageImage(l.url);
+      if (img) {
+        card.data.image = img;
+        break;
+      }
+    }
   } else if (card.kind === "image" && card.data.query) {
     const found = await findCommonsImages(card.data.query, card.data.count ?? 1);
     if (found.length) {
@@ -224,7 +236,10 @@ export async function showCard(a) {
   return `画面にカードを ${list.length} 枚出しました（say を付けたカードは、読み上げがその言葉に来たときに出ます）。答え（名前・時間・料金などの中身）をまだ文章で書いていなければ、今書いてください。カードの say の言葉を、その文にそのまま入れてください。すでに書いていれば、何も書き足さずに終えてください。「調べますね」などの前置きは答えではありません。「すでにお話ししたとおり」「カードに出しました」のような中身のない文は書かないでください。`;
 }
 
+/** 数字・要点・文・地図・動画のカードで、写真がなくリンクがあるもの（リンクのページの見出し画像を添える） */
+const PHOTO_FROM_LINK = ["stats", "points", "text", "map"];
 function needsImages(card) {
+  if (PHOTO_FROM_LINK.includes(card.kind)) return !card.data.image && Boolean(card.data.links?.[0]?.url);
   if (card.kind === "image") return Boolean(card.data.query) && !card.data.url;
   if (card.kind === "list") return card.data.items.some((it) => !it.image && it.url);
   return (card.kind === "page" || card.kind === "place" || card.kind === "web") && !card.data.image && Boolean(card.data.url);
