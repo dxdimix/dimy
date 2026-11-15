@@ -250,6 +250,26 @@ async function loadMemory(userId) {
   }
 }
 
+/** その日（日本時間）にはじめての「おはよう」か */
+export function isMorningGreeting(text) {
+  return /^(おはよう|おはよー|おっはよ|お早う|ohayo)/i.test(String(text).trim());
+}
+async function isFirstMorningGreeting(msg) {
+  if (!isMorningGreeting(msg.content)) return false;
+  const day = new Date(msg.created_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+  const { data, error } = await supabase
+    .from("messages")
+    .select("content")
+    .eq("user_id", msg.user_id)
+    .eq("role", "user")
+    .gte("created_at", new Date(`${day}T00:00:00+09:00`).toISOString())
+    .lt("created_at", msg.created_at);
+  if (error) return true;
+  const first = !data.some((m) => isMorningGreeting(m.content));
+  if (first) log("今日はじめての「おはよう」なので、朝の定番メッセージで答えます。");
+  return first;
+}
+
 async function handle(message) {
   // 他の常駐プログラムと取り合わないよう、pending → processing に変えられたときだけ処理する。
   const { data: claimed, error: claimError } = await supabase
@@ -275,9 +295,13 @@ async function handle(message) {
       claude.stop();
     }
 
+    // その日はじめての「おはよう」なら、朝の定番メッセージ（あいさつ・日付・天気・一言）で答えるよう合図を付ける
+    const content = (await isFirstMorningGreeting(claimed))
+      ? `${claimed.content}\n\n（DIMY への合図: 今日はじめての「おはよう」です。朝の定番メッセージで答えてください）`
+      : claimed.content;
     let prompt;
     if (claude.alive && claude.turns > 0) {
-      prompt = formatTurn(claimed.content);
+      prompt = formatTurn(content);
     } else {
       // 起動直後の最初の発言には、これまでの会話を添えて話の流れを引き継ぐ。
       const { data: history, error } = await supabase
@@ -290,7 +314,7 @@ async function handle(message) {
         .limit(HISTORY_COUNT);
       if (error) throw error;
       memoryChanged = false;
-      prompt = buildFirstTurn(history.reverse(), claimed.content, { memory: await loadMemory(claimed.user_id) });
+      prompt = buildFirstTurn(history.reverse(), content, { memory: await loadMemory(claimed.user_id) });
     }
 
     let firstAt = 0;

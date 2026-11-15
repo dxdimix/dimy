@@ -1,10 +1,11 @@
 "use client";
 
-// 天気の詳細（右下の天気を押すと開く）。これから 36 時間の 1 時間ごとと、おととい〜7 日後の日ごと。
+// 天気の詳細（右下の天気を押すと開く）。これから 36 時間の 1 時間ごと（Open-Meteo）と、おととい〜7 日後の日ごと（気象庁を選んでいれば気象庁の予報を重ねる）。
+// 右上の「Yahoo!天気」で、その地域の Yahoo!天気のページを開く。
 
 import { useEffect, useState } from "react";
-import { fetchForecast, weatherLabel, type Forecast, type Place } from "@/lib/weather";
-import { CloseIcon, WeatherIcon } from "./Icons";
+import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type WeatherSource } from "@/lib/weather";
+import { CloseIcon, ExternalIcon, WeatherIcon } from "./Icons";
 import { useDismiss } from "@/hooks/useDismiss";
 
 const todayKey = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
@@ -18,25 +19,46 @@ function dayLabel(date: string) {
   return { name: names[diff] ?? "", md, past: diff < 0, today: diff === 0 };
 }
 
-export function WeatherPanel({ place, onClose }: { place: Place; onClose: () => void }) {
+export function WeatherPanel({ place, source, onClose }: { place: Place; source: WeatherSource; onClose: () => void }) {
   const [data, setData] = useState<Forecast | null>(null);
+  const [jma, setJma] = useState<JmaResult | null>(null);
   const [error, setError] = useState("");
   const ref = useDismiss<HTMLDivElement>(onClose); // 外をクリック・Esc で閉じる
   useEffect(() => {
     let alive = true;
-    const load = () =>
+    const load = () => {
       fetchForecast(place)
         .then((f) => alive && setData(f))
         .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
+      // 日ごとの予報は気象庁（選んでいるとき）。取れなければ Open-Meteo のまま
+      if (source === "jma")
+        fetchJma(place)
+          .then((j) => alive && setJma(j))
+          .catch(() => alive && setJma(null));
+    };
     load();
     const t = setInterval(load, 15 * 60_000);
     return () => {
       alive = false;
       clearInterval(t);
     };
-  }, [place]);
+  }, [place, source]);
 
-  const temps = data?.days.flatMap((d) => [d.max, d.min]) ?? [];
+  // 気象庁の予報を、日ごとの行に重ねる（天気・最高 / 最低・降水確率。気象庁にない日は Open-Meteo のまま）
+  const days = (data?.days ?? []).map((d) => {
+    const j = jma?.forecast.days.find((x) => x.date === d.date);
+    const w = jma?.forecast.week.find((x) => x.date === d.date);
+    if (!j && !w) return { ...d, text: weatherLabel(d.code) };
+    return {
+      ...d,
+      code: j?.wmo ?? w?.wmo ?? d.code,
+      text: j?.weather || weatherLabel(j?.wmo ?? w?.wmo ?? d.code),
+      max: j?.max ?? w?.max ?? d.max,
+      min: j?.min ?? w?.min ?? d.min,
+      rain: j?.pop ?? w?.pop ?? d.rain,
+    };
+  });
+  const temps = days.flatMap((d) => [d.max, d.min]);
   const lo = Math.min(...temps);
   const hi = Math.max(...temps);
   const pct = (v: number) => (hi === lo ? 50 : ((v - lo) / (hi - lo)) * 100);
@@ -48,6 +70,10 @@ export function WeatherPanel({ place, onClose }: { place: Place; onClose: () => 
           <span className="font-mono text-xs tracking-[0.3em] text-cyan-300">WEATHER</span>
           <span className="ml-3 text-xs text-slate-400">{place.name}</span>
         </div>
+        <a href={yahooWeatherUrl(place.name)} target="_blank" rel="noopener" className="ml-auto mr-3 flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-100" title="Yahoo!天気で、この地域の天気を開く">
+          <ExternalIcon className="h-3.5 w-3.5" />
+          Yahoo!天気
+        </a>
         <button onClick={onClose} aria-label="閉じる" className="text-cyan-400 hover:text-cyan-100">
           <CloseIcon className="h-5 w-5" />
         </button>
@@ -72,12 +98,12 @@ export function WeatherPanel({ place, onClose }: { place: Place; onClose: () => 
           </div>
           {/* 日ごと */}
           <div className="mt-2 space-y-0.5">
-            {data.days.map((d) => {
+            {days.map((d) => {
               const l = dayLabel(d.date);
               return (
                 <div
                   key={d.date}
-                  title={`${weatherLabel(d.code)} 日の出 ${d.sunrise.slice(11)} 日の入り ${d.sunset.slice(11)}`}
+                  title={`${d.text} 日の出 ${d.sunrise.slice(11)} 日の入り ${d.sunset.slice(11)}`}
                   className={"grid grid-cols-[6.5rem_1.5rem_1fr_2.5rem] items-center gap-2 rounded px-2 py-1 " + (l.today ? "bg-cyan-400/10" : "") + (l.past ? " opacity-55" : "")}
                 >
                   <span className="truncate text-xs">
@@ -101,7 +127,22 @@ export function WeatherPanel({ place, onClose }: { place: Place; onClose: () => 
               );
             })}
           </div>
-          <p className="mt-2 text-[10px] text-slate-500">気温の下の % は降水確率。行にマウスを乗せると、天気と日の出・日の入りが出ます。</p>
+          {/* 今日・明日の予報の文（気象庁） */}
+          {jma && jma.forecast.days.length > 0 && (
+            <div className="mt-2 space-y-0.5 text-xs text-slate-300">
+              {jma.forecast.days.slice(0, 2).map((d) => (
+                <p key={d.date}>
+                  <span className="text-cyan-200">{dayLabel(d.date).name || dayLabel(d.date).md}</span>：{d.weather}
+                </p>
+              ))}
+            </div>
+          )}
+          <p className="mt-2 text-[10px] text-slate-500">
+            {jma
+              ? `日ごとの予報は気象庁（${jma.forecast.office}）、1 時間ごとは Open-Meteo。`
+              : "予報は Open-Meteo。"}
+            % は降水確率。行にマウスを乗せると、天気と日の出・日の入りが出ます。
+          </p>
         </>
       )}
     </div>

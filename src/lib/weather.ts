@@ -1,4 +1,4 @@
-// 天気（Open-Meteo。登録もキーも要らない無料のサービス）。
+// 天気。今の気温と 1 時間ごとは Open-Meteo（登録もキーも要らない無料のサービス）、日ごとの予報は気象庁（設定で選べる。既定は気象庁）。
 // 地域は画面で利用者が入力し、このブラウザに保存する（どの地域かを推測しない）。
 
 export type Place = { name: string; latitude: number; longitude: number };
@@ -8,7 +8,36 @@ export type Weather = {
   max: number;
   min: number;
   rain: number | null; // 降水確率（%）
+  /** 予報の文（気象庁のとき。例: 晴れ 時々 くもり） */
+  text?: string;
+  /** どこの予報か */
+  source: "気象庁" | "Open-Meteo";
 };
+
+/** 天気の元（設定の「表示」タブ）。気象庁 = 日本の公式の予報（Yahoo!天気・テレビと同じもと） */
+export type WeatherSource = "jma" | "open-meteo";
+
+export type JmaDay = { date: string; weather: string; code: string; wmo: number; pops: (number | null)[]; pop: number | null; min: number | null; max: number | null };
+export type JmaWeek = { date: string; code: string; wmo: number; pop: number | null; min: number | null; max: number | null };
+export type JmaResult = {
+  area: { office: string; officeName: string; class10: string; class10Name: string; name: string };
+  forecast: { office: string; area: string; reportedAt: string; days: JmaDay[]; week: JmaWeek[] };
+  yahoo: string;
+};
+
+/** 気象庁の予報（画面のサーバー側 /api/weather/jma が気象庁から取ってくる） */
+export async function fetchJma(place: Place): Promise<JmaResult> {
+  const res = await fetch(`/api/weather/jma?q=${encodeURIComponent(place.name)}`);
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error ?? `気象庁の予報を取れませんでした（${res.status}）`);
+  return j as JmaResult;
+}
+
+/** Yahoo!天気で、その地域を探すページ */
+export function yahooWeatherUrl(name: string) {
+  const word = name.split(/[\s　]+/).filter(Boolean).pop() ?? "";
+  return `https://weather.yahoo.co.jp/weather/search/?p=${encodeURIComponent(word)}`;
+}
 
 /** 天気の番号（WMO の天気コード）を日本語にする。 */
 export function weatherLabel(code: number): string {
@@ -53,6 +82,7 @@ export async function fetchWeather(place: Place): Promise<Weather> {
     max: j.daily.temperature_2m_max[0],
     min: j.daily.temperature_2m_min[0],
     rain: j.daily.precipitation_probability_max?.[0] ?? null,
+    source: "Open-Meteo",
   };
 }
 

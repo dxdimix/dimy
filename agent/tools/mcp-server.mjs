@@ -12,6 +12,7 @@ import { addNote, listNotes } from "./memory.mjs";
 import { listClaudeSessions, profilesNow, runCommand } from "../lib/pc.mjs";
 import { calendarAdd, calendarEvents } from "./calendar.mjs";
 import { readUserSetting } from "./settings.mjs";
+import { weatherForecast } from "./weather.mjs";
 
 const SERVER = { name: "dimy", version: "1.0.0" };
 
@@ -28,6 +29,14 @@ const where = {
 const noLog = () => {};
 
 export const TOOLS = [
+  {
+    name: "weather_forecast",
+    description:
+      "天気予報（気象庁の公式の予報。Yahoo!天気やテレビと同じもと）。今日と明日の天気・最高 / 最低気温・降水確率を返す。" +
+      "地域は利用者が画面で決めたもの。別の地域を聞かれたら place に市区町村の名前を入れる。",
+    inputSchema: { type: "object", properties: { place: { type: "string", description: "市区町村の名前（省略すると、いつもの地域）" } } },
+    call: (a) => weatherForecast(a),
+  },
   {
     name: "calendar_events",
     description: "利用者の Google カレンダー（マスターアカウント。表示しているカレンダーすべて）の予定を返す。from / to は \"2026-11-20\" か ISO の日時。省くと今日から 7 日。",

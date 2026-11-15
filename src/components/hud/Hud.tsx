@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Message } from "@/lib/types";
 import { takeSpeakable } from "@/lib/speech";
-import { fetchWeather, findPlace, weatherLabel, type Place, type Weather } from "@/lib/weather";
+import { fetchJma, fetchWeather, findPlace, weatherLabel, yahooWeatherUrl, type Place, type Weather, type WeatherSource } from "@/lib/weather";
 import { useAgentOnline } from "@/hooks/useAgentOnline";
 import { useSpeaker } from "@/hooks/useSpeaker";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -109,14 +109,28 @@ function useNow() {
   return now;
 }
 
-function useWeather(place: Place | null) {
+function useWeather(place: Place | null, source: WeatherSource) {
   const [weather, setWeather] = useState<Weather | null>(null);
   useEffect(() => {
     if (!place) return;
     let cancelled = false;
+    // 気象庁を選んでいるとき: 今の気温は Open-Meteo、今日の天気・最高 / 最低・降水確率は気象庁（取れなければ Open-Meteo のまま）
     const run = () =>
-      fetchWeather(place)
-        .then((w) => !cancelled && setWeather(w))
+      Promise.all([fetchWeather(place), source === "jma" ? fetchJma(place).catch(() => null) : Promise.resolve(null)])
+        .then(([w, j]) => {
+          if (cancelled) return;
+          const today = j?.forecast.days[0];
+          if (!today) return setWeather(w);
+          setWeather({
+            ...w,
+            code: today.wmo,
+            text: today.weather,
+            max: today.max ?? w.max,
+            min: today.min ?? j?.forecast.week.find((d) => d.date === today.date)?.min ?? w.min,
+            rain: today.pop ?? w.rain,
+            source: "気象庁",
+          });
+        })
         .catch(() => {});
     run();
     const t = setInterval(run, 30 * 60 * 1000);
@@ -124,7 +138,7 @@ function useWeather(place: Place | null) {
       cancelled = true;
       clearInterval(t);
     };
-  }, [place]);
+  }, [place, source]);
   return weather;
 }
 
@@ -170,7 +184,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [place, setPlace] = useState<Place | null>(null);
   const [error, setError] = useState("");
   const [captionUntil, setCaptionUntil] = useState(0);
-  const weather = useWeather(place);
+  // 天気の元（設定の「表示」タブ。既定は気象庁）
+  const weatherSource: WeatherSource = getPref("weatherSource") === "open-meteo" ? "open-meteo" : "jma";
+  const weather = useWeather(place, weatherSource);
   const liveIds = useRef(new Set<string>());
   const spokenUpTo = useRef(new Map<string, number>());
 
@@ -886,7 +902,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           onClick={() => setPanel(panel === "weather" ? "none" : "weather")}
           data-panel-toggle
           className="absolute bottom-6 right-6 flex items-center gap-3 rounded-lg px-2 py-1 text-left transition hover:bg-cyan-400/10"
-          title={`${place?.name} ${weatherLabel(weather.code)}（押すと詳しく）`}
+          title={`${place?.name} ${weather.text ?? weatherLabel(weather.code)}（${weather.source}。押すと詳しく）`}
           aria-label="天気の詳細"
         >
           <WeatherIcon code={weather.code} className="h-10 w-10 text-cyan-300" />
@@ -898,7 +914,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           </div>
         </button>
       )}
-      {panel === "weather" && place && <WeatherPanel place={place} onClose={closePanel} />}
+      {panel === "weather" && place && <WeatherPanel place={place} source={weatherSource} onClose={closePanel} />}
 
       {/* 下中央：マイク（小窓より手前に出す。周りの空いた所は、下の小窓をそのまま触れるようにする） */}
       <div className="pointer-events-none absolute inset-x-0 bottom-8 z-[900] flex flex-col items-center [&>*]:pointer-events-auto">
@@ -1078,6 +1094,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           }}
           place={place}
           onSavePlace={savePlace}
+          weatherSource={weatherSource}
+          setWeatherSource={(v) => setPref("weatherSource", v)}
+          yahooUrl={place ? yahooWeatherUrl(place.name) : null}
           captionSec={captionSec}
           setCaptionSec={(v) => {
             setCaptionSec(v);

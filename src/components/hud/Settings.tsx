@@ -68,6 +68,9 @@ export type SettingsProps = {
   // 表示
   place: Place | null;
   onSavePlace: (name: string) => Promise<string | null>; // 失敗したときは理由を返す
+  weatherSource: "jma" | "open-meteo";
+  setWeatherSource: (v: "jma" | "open-meteo") => void;
+  yahooUrl: string | null;
   captionSec: number;
   setCaptionSec: (v: number) => void;
 };
@@ -258,6 +261,36 @@ function DisplayTab(p: SettingsProps) {
         </form>
         {msg && <p className="mt-1 text-xs text-cyan-300/80">{msg}</p>}
       </Row>
+      <div>
+        <div className="mb-1.5 text-cyan-100">天気の予報の元</div>
+        <div className="space-y-1 text-xs">
+          <label className="flex cursor-pointer items-start gap-2">
+            <input type="radio" name="dimy-weather-src" checked={p.weatherSource === "jma"} onChange={() => p.setWeatherSource("jma")} className="mt-0.5 accent-cyan-400" />
+            <span>
+              <span className="text-cyan-100">気象庁</span>
+              <span className="block text-slate-400">日本の公式の予報。Yahoo!天気やテレビの予報と同じもとです（今の気温と 1 時間ごとの天気は Open-Meteo）。</span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2">
+            <input type="radio" name="dimy-weather-src" checked={p.weatherSource === "open-meteo"} onChange={() => p.setWeatherSource("open-meteo")} className="mt-0.5 accent-cyan-400" />
+            <span>
+              <span className="text-cyan-100">Open-Meteo</span>
+              <span className="block text-slate-400">海外の無料の天気サービス。</span>
+            </span>
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          Yahoo!天気は、外から予報を取り出す仕組みが公開されていないため、元には選べません。天気の詳細から Yahoo!天気のページを開けます。
+          {p.yahooUrl && (
+            <>
+              {" "}
+              <a href={p.yahooUrl} target="_blank" rel="noopener" className="text-cyan-300 underline">
+                Yahoo!天気で見る
+              </a>
+            </>
+          )}
+        </p>
+      </div>
       <Slider
         label="返事の字幕を出しておく時間"
         value={p.captionSec}
