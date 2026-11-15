@@ -1,6 +1,6 @@
 "use client";
 
-// 設定の画面。項目をカテゴリーごとのタブに分ける。設定はこの端末のブラウザに保存する。
+// 設定の画面。項目をカテゴリーごとのタブに分ける。設定はデータベースに保存する（どの端末でも共通。src/lib/prefs.ts）。
 // - 音声: 読み上げ、声の大きさ、声、話す速さ、声の高さ
 // - 聞き取り: 話し終わりを待つ時間、「ディミ」の呼びかけ、続けて話せる時間、右 Ctrl を 2 回
 // - 表示: 天気の地域、字幕を出しておく時間
@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Place } from "@/lib/weather";
 import type { ChromeProfile } from "@/lib/pc";
+import { getPref, setPref } from "@/lib/prefs";
 import { DEFAULT_PITCH, DEFAULT_RATE, DEFAULT_VOLUME } from "@/hooks/useSpeaker";
 import { CloseIcon } from "./Icons";
 
@@ -21,7 +22,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "account", label: "アカウント" },
   { id: "restart", label: "再起動" },
 ];
-const TAB_KEY = "dimy.settingsTab";
+const TAB_KEY = "settingsTab";
 
 export type SettingsProps = {
   onClose: () => void;
@@ -74,17 +75,13 @@ export type SettingsProps = {
 export function Settings(p: SettingsProps) {
   const [tab, setTab] = useState<Tab>("voice");
   useEffect(() => {
-    try {
-      const t = localStorage.getItem(TAB_KEY) as Tab | null;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (t && TABS.some((x) => x.id === t)) setTab(t);
-    } catch {}
+    const t = getPref(TAB_KEY) as Tab | null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (t && TABS.some((x) => x.id === t)) setTab(t);
   }, []);
   const choose = (t: Tab) => {
     setTab(t);
-    try {
-      localStorage.setItem(TAB_KEY, t);
-    } catch {}
+    setPref(TAB_KEY, t);
   };
 
   // Esc で閉じる

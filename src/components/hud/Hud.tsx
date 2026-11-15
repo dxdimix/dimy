@@ -17,6 +17,7 @@ import { useSpeaker } from "@/hooks/useSpeaker";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useWakeWord } from "@/hooks/useWakeWord";
 import { useAutoReload } from "@/hooks/useAutoReload";
+import { deviceId, getPref, initPrefs, setPref, usePrefsVersion } from "@/lib/prefs";
 import { useActiveDevice } from "@/hooks/useActiveDevice";
 import { isEcho, toSpeech } from "@/lib/wake";
 import {
@@ -79,18 +80,12 @@ const FOLLOW_KEY = "dimy.followSec"; // 返事のあと、続けて話せる時�
 const HOTKEY_KEY = "dimy.hotkey"; // 右 Ctrl を 2 回で話すか
 const CAPTION_KEY = "dimy.captionSec"; // 返事の字幕を出しておく時間（秒）
 
+// 設定はデータベースに保存する（どの端末でも共通。src/lib/prefs.ts）。名前の頭の「dimy.」は付けない
 function load(key: string) {
-  try {
-    // 以前の名前（kymis.〇〇）で保存した設定も引き継ぐ
-    return localStorage.getItem(key) ?? localStorage.getItem(key.replace(/^dimy\./, "kymis."));
-  } catch {
-    return null;
-  }
+  return getPref(key.replace(/^dimy\./, ""));
 }
 function save(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {}
+  setPref(key.replace(/^dimy\./, ""), value);
 }
 function loadNumber(key: string, fallback: number) {
   const v = load(key);
@@ -187,7 +182,11 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     if (!g.startsWith("connected")) setError(`Google カレンダーとつなげませんでした（${g}）`);
   }, []);
 
-  // ブラウザに保存した設定を読む（ブラウザでしか読めないため、表示のあとで）
+  // 設定を読む（データベースから。ほかの端末で変わったときも、ここで読み直す）
+  const prefsVersion = usePrefsVersion();
+  useEffect(() => {
+    initPrefs(supabase);
+  }, [supabase]);
   useEffect(() => {
     const p = load(PLACE_KEY);
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -199,7 +198,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     setHotkeyOn(load(HOTKEY_KEY) !== "off");
     setCaptionSec(loadNumber(CAPTION_KEY, 12));
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [prefsVersion]);
 
   // 会話：直近の分を読み、変化を Realtime で受け取る
   useEffect(() => {
@@ -267,6 +266,18 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     volume: loadNumber(VOLUME_KEY, NaN),
   });
   const { speak: speakRaw, cancel: cancelSpeech } = speaker;
+  // 声・速さ・高さ・大きさも、設定が変わったら（ほかの端末で変えたときも）読み直す
+  const { setVoiceName, setRate, setPitch, setVolume } = speaker;
+  useEffect(() => {
+    const v = load(VOICE_KEY);
+    if (v) setVoiceName(v);
+    const r = loadNumber(RATE_KEY, NaN);
+    if (Number.isFinite(r)) setRate(r);
+    const pi = loadNumber(PITCH_KEY, NaN);
+    if (Number.isFinite(pi)) setPitch(pi);
+    const vo = loadNumber(VOLUME_KEY, NaN);
+    if (Number.isFinite(vo)) setVolume(Math.min(1, Math.max(0, vo)));
+  }, [prefsVersion, setVoiceName, setRate, setPitch, setVolume]);
   const speak = useCallback(
     (text: string) => {
       // 念のため: 同じ文を 5 秒以内に 2 回読まない
@@ -461,14 +472,20 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [siteAccounts, setSiteAccounts] = useState<Record<string, string>>({});
   // 開く場所（端末ごと）。スマホは最初から「この端末」、それ以外は「PC の Chrome」
   const [openOn, setOpenOnRaw] = useState<"pc" | "here">("pc");
+  // 開く場所は端末ごとに違う（デスクトップは PC の Chrome、ノート・スマホはその端末）ので、端末の番号を付けた名前で保存する
+  const openOnKey = () => `device.${deviceId()}.openOn`;
   useEffect(() => {
-    const v = load(OPEN_ON_KEY);
+    let legacy: string | null = null;
+    try {
+      legacy = localStorage.getItem(OPEN_ON_KEY);
+    } catch {}
+    const v = getPref(openOnKey()) ?? legacy;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpenOnRaw(v === "here" || v === "pc" ? v : window.matchMedia("(pointer: coarse)").matches ? "here" : "pc");
-  }, []);
+  }, [prefsVersion]);
   const setOpenOn = (v: "pc" | "here") => {
     setOpenOnRaw(v);
-    save(OPEN_ON_KEY, v);
+    setPref(openOnKey(), v);
   };
   // サイトごとのアカウントは、どの端末でも共通（表 user_settings）。
   // 以前この端末のブラウザに保存していたものは、データベースにまだ何もなければ引き継ぐ
@@ -691,8 +708,10 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   }, [panel, supabase]);
 
   // 新しい版の画面が公開されたら、話していない・何も開いていないときに読み込み直す
-  useAutoReload(mode === "idle" && !wakeListening && panel === "none" && !replyActive, (from, to) =>
-    logActivity(supabase, "ui", `新しい版の画面を読み込み直した（${from.slice(0, 7)} → ${to.slice(0, 7)}）`),
+  useAutoReload(
+    mode === "idle" && !wakeListening && panel === "none" && !replyActive,
+    (from, to) => logActivity(supabase, "ui", `新しい版の画面を読み込み直した（${from.slice(0, 7)} → ${to.slice(0, 7)}）`),
+    mode === "idle" && !wakeListening && !replyActive,
   );
 
   function onMic() {

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACTIVITY_LABEL } from "@/lib/activity";
+import { getPref, setPref } from "@/lib/prefs";
 import { rowsToText, stamp, type LogRow as Row } from "@/lib/logs";
 import { CloseIcon, ReloadIcon } from "./Icons";
 
@@ -78,20 +79,16 @@ export function AdminPanel({ supabase, onClose }: { supabase: SupabaseClient; on
   const [query, setQuery] = useState("");
   const [onlyBad, setOnlyBad] = useState(false);
   const [auto, setAuto] = useState(true);
-  // 並び順（古い順 / 新しい順）。この端末のブラウザに覚えておく
+  // 並び順（古い順 / 新しい順）。設定として保存する（どの端末でも共通）
   const [newestFirst, setNewestFirst] = useState(false);
   useEffect(() => {
-    try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setNewestFirst(localStorage.getItem("dimy.adminOrder") === "newest");
-    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNewestFirst(getPref("adminOrder") === "newest");
   }, []);
   const toggleOrder = () => {
     const next = !newestFirst;
     setNewestFirst(next);
-    try {
-      localStorage.setItem("dimy.adminOrder", next ? "newest" : "oldest");
-    } catch {}
+    setPref("adminOrder", next ? "newest" : "oldest");
   };
   const [data, setData] = useState<{ rows: Row[]; error?: string } | null>(null);
   const [copied, setCopied] = useState("");

@@ -64,7 +64,8 @@ const MCP_CONFIG_FILE = "dimy-mcp.json"; // WORKDIR からの相対パス
 const EXIT_NO_RESTART = 3;
 const EXIT_RESTART_NOW = 4;
 // 自動更新: 確認の間隔と、更新元の GitHub リポジトリ。DIMY_AUTO_UPDATE=off で止められる。
-const UPDATE_INTERVAL_MS = Number(process.env.DIMY_UPDATE_INTERVAL_MS || 60 * 60 * 1000);
+// 新しい版は 5 分ごとに確かめる（main に送ったものが、遅くとも数分で PC に届くように）
+const UPDATE_INTERVAL_MS = Number(process.env.DIMY_UPDATE_INTERVAL_MS || 5 * 60 * 1000);
 // リポジトリの名前を jarvis から dimy に変えた。変える前と後のどちらでも更新できるよう、両方を順に試す。
 const UPDATE_REPOS = (process.env.DIMY_UPDATE_REPO || "dxdimix/dimy,dxdimix/kymis,dxdimix/jarvis").split(",").map((r) => r.trim());
 // この時間、会話がなければ更新してよい。

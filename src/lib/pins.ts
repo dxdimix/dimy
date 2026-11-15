@@ -1,8 +1,11 @@
 // 固定ウィンドウ（ディミの中に置いておくページや映像）の保存。
-// 置き場所（board）ごとに、この端末のブラウザに保存する。
+// 置き場所（board）ごとに、設定の保存場所（src/lib/prefs.ts。データベースで共通）に保存する。
 // - "hud": メイン画面
 // - "palette-1" など: パレット（2 枚目以降のモニター用の画面）。番号はモニターの番号
-// 別の置き場所へ送るときは、相手の置き場所の保存に書き足す（開いている画面は storage の知らせで読み直す）。
+// 別の置き場所へ送るときは、相手の置き場所の保存に書き足す（開いている画面は設定の変化の知らせで読み直す）。
+
+
+import { getPref, prefKeys, setPref } from "./prefs";
 
 export type PinKind = "web" | "capture";
 
@@ -35,15 +38,13 @@ export const DEFAULT_VIEW: BoardView = { z: 1, x: 0, y: 0 };
 
 export function loadView(board: string): BoardView {
   try {
-    const v = JSON.parse(localStorage.getItem("dimy.pinview." + board) ?? "null") as BoardView | null;
+    const v = JSON.parse(getPref("pinview." + board) ?? "null") as BoardView | null;
     if (v && [v.z, v.x, v.y].every(Number.isFinite)) return v;
   } catch {}
   return DEFAULT_VIEW;
 }
 export function saveView(board: string, v: BoardView) {
-  try {
-    localStorage.setItem("dimy.pinview." + board, JSON.stringify(v));
-  } catch {}
+  setPref("pinview." + board, JSON.stringify(v));
 }
 
 export const ZOOM_MIN = 0.25;
@@ -61,7 +62,7 @@ export function zoomAt(v: BoardView, z: number, cx: number, cy: number): BoardVi
   return { z, x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k };
 }
 
-const PREFIX = "dimy.pins.";
+const PREFIX = "pins.";
 
 export function boardKey(board: string) {
   return PREFIX + board;
@@ -69,7 +70,7 @@ export function boardKey(board: string) {
 
 export function loadPins(board: string): Pin[] {
   try {
-    const raw = localStorage.getItem(boardKey(board));
+    const raw = getPref(boardKey(board));
     const list = raw ? (JSON.parse(raw) as Pin[]) : [];
     return Array.isArray(list) ? list.filter((p) => p && typeof p.id === "string") : [];
   } catch {
@@ -78,20 +79,13 @@ export function loadPins(board: string): Pin[] {
 }
 
 export function savePins(board: string, pins: Pin[]) {
-  try {
-    localStorage.setItem(boardKey(board), JSON.stringify(pins));
-  } catch {}
+  setPref(boardKey(board), JSON.stringify(pins));
 }
 
 /** 保存のある置き場所の一覧（メイン画面と、使ったことのあるパレット） */
 export function knownBoards(): string[] {
   const set = new Set(["hud", "palette-1"]);
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k?.startsWith(PREFIX)) set.add(k.slice(PREFIX.length));
-    }
-  } catch {}
+  for (const k of prefKeys(PREFIX)) set.add(k.slice(PREFIX.length));
   return [...set].sort((a, b) => (a === "hud" ? -1 : b === "hud" ? 1 : a.localeCompare(b, "ja", { numeric: true })));
 }
 

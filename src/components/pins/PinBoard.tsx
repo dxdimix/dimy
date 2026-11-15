@@ -28,6 +28,7 @@ import {
   type Rect,
 } from "@/lib/pins";
 import { droppedUrl } from "@/lib/frame";
+import { getPref, onPrefs } from "@/lib/prefs";
 import { getScreens, openPalette, screenIndexAt } from "@/lib/screens";
 import { Bracket } from "@/components/hud/AppWindows";
 import { CaptureIcon, CloseIcon, ExternalIcon, LockIcon, PinIcon, ReloadIcon, SendIcon } from "@/components/hud/Icons";
@@ -88,12 +89,23 @@ export function usePinBoard(board: string, session: Session) {
     viewRef.current = v;
     setViewRaw(v);
     setLoaded(true);
-    // ほかの画面（パレットなど）から送られてきたら読み直す
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === boardKey(board)) setPins(loadPins(board));
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    // ほかの画面（パレット・ほかの端末）で変わったら読み直す（中身が同じなら何もしない）
+    let last = getPref(boardKey(board));
+    let lastView = getPref("pinview." + board);
+    return onPrefs(() => {
+      const now = getPref(boardKey(board));
+      if (now !== last) {
+        last = now;
+        setPins(loadPins(board));
+      }
+      const v = getPref("pinview." + board);
+      if (v !== lastView) {
+        lastView = v;
+        const lv = loadView(board);
+        viewRef.current = lv;
+        setViewRaw(lv);
+      }
+    });
   }, [board]);
 
   useEffect(() => {

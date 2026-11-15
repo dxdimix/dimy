@@ -10,27 +10,17 @@ import { takeSpeakable } from "@/lib/speech";
 import { useAgentOnline } from "@/hooks/useAgentOnline";
 import { useSpeaker } from "@/hooks/useSpeaker";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { getPref, initPrefs, setPref } from "@/lib/prefs";
 
 const HISTORY_LIMIT = 100;
 
 // 読み上げなどの設定はこのブラウザにだけ保存する（保存できない環境でも動くようにする）。
+// 設定はデータベースに保存する（どの端末でも共通。src/lib/prefs.ts）
 function loadSetting(key: string, fallback: string) {
-  try {
-    // 以前の名前（jarvis.〇〇）で保存した設定も引き継ぐ。
-    return (
-      localStorage.getItem(`dimy.${key}`) ??
-      localStorage.getItem(`kymis.${key}`) ??
-      localStorage.getItem(`jarvis.${key}`) ??
-      fallback
-    );
-  } catch {
-    return fallback;
-  }
+  return getPref(key) ?? fallback;
 }
 function saveSetting(key: string, value: string) {
-  try {
-    localStorage.setItem(`dimy.${key}`, value);
-  } catch {}
+  setPref(key, value);
 }
 
 /**
@@ -49,6 +39,10 @@ export function Chat({
   /** 「YouTube を開いて」など、画面だけで済ませる命令を先に受け取る（済ませたら true。PC の Claude には送らない） */
   onLocalCommand?: (text: string) => Promise<boolean>;
 }) {
+  // 設定（声の速さなど）をデータベースから読む（どの端末でも共通）
+  useEffect(() => {
+    initPrefs(supabase);
+  }, [supabase]);
   const [messages, setMessages] = useState<Message[]>([]);
   // 返事への評価（message_id → 評価）。表がまだない場合は、評価のボタンを出さない
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});

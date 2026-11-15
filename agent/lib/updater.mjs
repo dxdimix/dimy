@@ -116,6 +116,7 @@ export function startAutoUpdate(o) {
   let latest = null;
   let latestRepo = null;
   let busy = false;
+  let lastSameLog = 0;
 
   async function tick() {
     if (busy) return;
@@ -124,7 +125,11 @@ export function startAutoUpdate(o) {
       if (!latest) {
         const found = await findLatest(o.repos);
         if (!found) o.log("新しい版を確かめられませんでした（GitHub に届かない）。");
-        else if (found.sha === current) o.log(`新しい版はありません（今の版 ${current.slice(0, 7)}）。`);
+        else if (found.sha === current && Date.now() - lastSameLog > 60 * 60_000) {
+          // 5 分ごとに確かめるので、「新しい版はない」は 1 時間に 1 回だけ記録する
+          lastSameLog = Date.now();
+          o.log(`新しい版はありません（今の版 ${current.slice(0, 7)}）。`);
+        }
         if (found && found.sha !== current) {
           latest = found.sha;
           latestRepo = found.repo;

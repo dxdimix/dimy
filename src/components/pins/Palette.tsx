@@ -11,6 +11,8 @@ import type { Session } from "@supabase/supabase-js";
 import { ExpandIcon, PinIcon, ShrinkIcon } from "@/components/hud/Icons";
 import { BoardZoomBadge, DropOverlay, PinBoard, usePinBoard, usePinDrop } from "./PinBoard";
 import { splitSlots, type SplitLayout } from "@/lib/pins";
+import { getPref, setPref } from "@/lib/prefs";
+import { useAutoReload } from "@/hooks/useAutoReload";
 
 const LAYOUTS: { id: SplitLayout; label: string }[] = [
   { id: "free", label: "分割なし" },
@@ -39,17 +41,17 @@ export function Palette({ session, n }: { session: Session; n: number }) {
   const board = usePinBoard(`palette-${n}`, session);
   const dragging = usePinDrop((url, at) => board.addWeb(url, at));
   const [adding, setAdding] = useState(false);
+  // 新しい版の画面が公開されたら、ウィンドウを動かしていないときに読み込み直す
+  useAutoReload(!adding);
   const [fullscreen, setFullscreen] = useState(false);
   // 画面分割（モニターごとに覚えておく）
-  const layoutKey = `dimy.paletteLayout.${n}`;
+  const layoutKey = `paletteLayout.${n}`;
   const [layout, setLayout] = useState<SplitLayout>("free");
   const [size, setSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
-    try {
-      const l = localStorage.getItem(layoutKey) as SplitLayout | null;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (l && LAYOUTS.some((x) => x.id === l)) setLayout(l);
-    } catch {}
+    const l = getPref(layoutKey) as SplitLayout | null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (l && LAYOUTS.some((x) => x.id === l)) setLayout(l);
     const onResize = () => setSize({ w: window.innerWidth, h: window.innerHeight });
     onResize();
     window.addEventListener("resize", onResize);
@@ -57,9 +59,7 @@ export function Palette({ session, n }: { session: Session; n: number }) {
   }, [layoutKey]);
   const chooseLayout = (l: SplitLayout) => {
     setLayout(l);
-    try {
-      localStorage.setItem(layoutKey, l);
-    } catch {}
+    setPref(layoutKey, l);
   };
   // 上の帯（ボタン）の分だけ、枠を下げる
   const slots = size.w ? splitSlots(layout, size.w, size.h, 8, 56) : [];
