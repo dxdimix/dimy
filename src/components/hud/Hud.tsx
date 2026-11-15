@@ -48,6 +48,7 @@ import { HudChrome } from "./HudChrome";
 import { WeatherPanel } from "./WeatherPanel";
 import { CalendarPanel } from "./CalendarPanel";
 import { DismissBox } from "./DismissBox";
+import { TextBox } from "./TextBox";
 import { AdminPanel } from "./AdminPanel";
 import { logActivity } from "@/lib/activity";
 import { DropOverlay, PinBoard, usePinBoard, usePinDrop } from "@/components/pins/PinBoard";
@@ -1214,39 +1215,43 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
 
       {/* 下中央：マイク（小窓より手前に出す。周りの空いた所は、下の小窓をそのまま触れるようにする） */}
       <div className="pointer-events-none absolute inset-x-0 bottom-8 z-[900] flex flex-col items-center [&>*]:pointer-events-auto">
-        <div className="relative">
-        {/* 強制停止（いつも出しておく。動いているときは明るくなる。Esc キー・「ストップ」でも同じ） */}
-        <button
-          onClick={forceStop}
-          title="強制停止（Esc ／「ストップ」）"
-          aria-label="強制停止"
-          className={
-            "absolute -left-16 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border backdrop-blur transition " +
-            (mode !== "idle" || wakeListening
-              ? "border-rose-400/80 bg-rose-500/15 text-rose-200 shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:bg-rose-500/30"
-              : "border-cyan-400/25 bg-slate-950/50 text-cyan-300/60 hover:border-rose-400/60 hover:text-rose-200")
-          }
-        >
-          <StopIcon className="h-5 w-5" />
-        </button>
-        {recognition.supported ? (
+        {/* 下の操作: 強制停止・文字の入力欄（タイピングで話しかける。利用者の希望）・マイク */}
+        <div className="flex w-[min(760px,calc(100vw-1.5rem))] items-end gap-2 md:gap-3">
+          {/* 強制停止（いつも出しておく。動いているときは明るくなる。Esc キー・「ストップ」でも同じ） */}
           <button
-            onClick={onMic}
-            aria-label={recognition.listening ? "聞き取りをやめる" : "話しかける"}
+            onClick={forceStop}
+            title="強制停止（Esc ／「ストップ」）"
+            aria-label="強制停止"
             className={
-              "grid h-16 w-16 place-items-center rounded-full border backdrop-blur transition " +
-              (recognition.listening
-                ? "animate-pulse border-rose-400 bg-rose-500/20 text-rose-200 shadow-[0_0_28px_rgba(244,63,94,0.5)]"
-                : "border-cyan-300/60 bg-cyan-500/10 text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.35)] hover:bg-cyan-500/20")
+              "mb-1.5 grid h-10 w-10 shrink-0 place-items-center rounded-full border backdrop-blur transition md:mb-2.5 md:h-11 md:w-11 " +
+              (mode !== "idle" || wakeListening
+                ? "border-rose-400/80 bg-rose-500/15 text-rose-200 shadow-[0_0_18px_rgba(244,63,94,0.45)] hover:bg-rose-500/30"
+                : "border-cyan-400/25 bg-slate-950/50 text-cyan-300/60 hover:border-rose-400/60 hover:text-rose-200")
             }
           >
-            {recognition.listening ? <SendGlyph /> : <MicIcon className="h-7 w-7" />}
+            <StopIcon className="h-5 w-5" />
           </button>
-        ) : (
-          <button onClick={() => toggleChat(true)} className={iconBtn} aria-label="文字で話しかける" title="このブラウザは音声入力に対応していません。文字で話しかけてください">
-            <ChatIcon className="h-5 w-5" />
-          </button>
-        )}
+          <TextBox
+            onSend={(t) => {
+              cancelSpeech();
+              logActivity(supabase, "typed", "下の入力欄から文字で送った");
+              void handleUtterance(t);
+            }}
+          />
+          {recognition.supported && (
+            <button
+              onClick={onMic}
+              aria-label={recognition.listening ? "聞き取りをやめる" : "話しかける"}
+              className={
+                "grid h-14 w-14 shrink-0 place-items-center rounded-full border backdrop-blur transition md:h-16 md:w-16 " +
+                (recognition.listening
+                  ? "animate-pulse border-rose-400 bg-rose-500/20 text-rose-200 shadow-[0_0_28px_rgba(244,63,94,0.5)]"
+                  : "border-cyan-300/60 bg-cyan-500/10 text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.35)] hover:bg-cyan-500/20")
+              }
+            >
+              {recognition.listening ? <SendGlyph /> : <MicIcon className="h-7 w-7" />}
+            </button>
+          )}
         </div>
         {pendingLink && (
           <button
