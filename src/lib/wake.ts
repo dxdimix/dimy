@@ -37,6 +37,8 @@ export function parseControl(text: string): Control | null {
 export function toSpeech(text: string): string {
   return text
     .replace(/https?:\/\/\S+/g, "")
+    .replace(/\bDimiX\b/gi, "ディミックス")
+    .replace(/競馬\s*Edge/gi, "けいばエッジ")
     .replace(/\bDIMY\b/gi, "ディミ")
     .replace(/\bFX\b/g, "エフエックス")
     .replace(/\bGMO\b/g, "ジーエムオー")

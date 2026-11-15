@@ -20,10 +20,10 @@ export type AppEntry = {
 };
 
 export const APPS: AppEntry[] = [
-  { id: "fx", name: "FX", url: "https://fx.dxdimix.com", login: true, words: ["fx", "エフエックス", "為替", "dimix", "ディミックス", "でぃみっくす"] },
-  { id: "kabu", name: "株", url: "https://kabu.dxdimix.com", login: true, words: ["株", "かぶ", "カブ", "株式", "かぶ太郎", "カブ太郎", "かぶたろう", "株太郎"] },
+  { id: "fx", name: "DimiX", url: "https://fx.dxdimix.com", login: true, words: ["fx", "エフエックス", "為替", "dimix", "ディミックス", "でぃみっくす"] },
+  { id: "kabu", name: "かぶ太郎", url: "https://kabu.dxdimix.com", login: true, words: ["株", "かぶ", "カブ", "株式", "かぶ太郎", "カブ太郎", "かぶたろう", "株太郎"] },
   { id: "umsheet", name: "UMSheet", url: "https://umsheet.dxdimix.com", login: true, words: ["umsheet", "ユーエムシート", "umシート", "せどり"] },
-  { id: "keiba", name: "競馬", url: "https://keiba.dxdimix.com", login: true, words: ["競馬", "けいば", "ケイバ", "競馬edge", "競馬エッジ", "けいばエッジ", "ケイバエッジ", "keibaedge"] },
+  { id: "keiba", name: "競馬Edge", url: "https://keiba.dxdimix.com", login: true, words: ["競馬", "けいば", "ケイバ", "競馬edge", "競馬エッジ", "けいばエッジ", "ケイバエッジ", "keibaedge"] },
   {
     id: "medical",
     name: "ノーティス（医療機器管理）",

@@ -172,7 +172,7 @@ export function AppWindows({ state }: { state: ReturnType<typeof useAppWindows> 
                 }
               >
                 <AppIcon id={app.id} className="h-4 w-4 text-cyan-300" />
-                <span className="truncate font-mono text-[11px] uppercase tracking-[0.3em] text-cyan-200/90">{app.name}</span>
+                <span className="truncate text-xs font-semibold tracking-[0.15em] text-cyan-200/90">{app.name}</span>
                 {/* 帯の飾りの目盛り */}
                 <span className="mx-2 hidden h-px flex-1 bg-[repeating-linear-gradient(90deg,rgba(34,211,238,0.5)_0_2px,transparent_2px_8px)] sm:block" />
                 <button onClick={() => update(win.id, { key: win.key + 1 })} className={btn} title="読み込み直す" aria-label="読み込み直す">
