@@ -278,6 +278,11 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         setCards((prev) => (prev.some((c) => c.id === row.id) ? prev : [...prev, { id: row.id, kind: row.kind, title: row.title, data: row.data ?? {}, pinned: false, at: Date.now() }]));
         logActivity(supabase, "card", `画面のカード（DIMY）: ${row.kind} ${row.title}`);
       })
+      // あとから写真が書き足されたとき
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cards" }, (payload) => {
+        const row = payload.new as { id: string; data: CardData };
+        setCards((prev) => prev.map((c) => (c.id === row.id ? { ...c, data: row.data ?? c.data } : c)));
+      })
       .subscribe();
     return () => {
       supabase.removeChannel(channel);

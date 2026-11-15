@@ -125,13 +125,23 @@ async function addImages(card) {
 
 export async function showCard(a) {
   const card = normalizeCard(a);
-  await addImages(card);
   const raw = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const key = process.env.SUPABASE_SECRET_KEY?.trim();
   const owner = process.env.DIMY_OWNER_ID;
   if (!raw || !key || !owner) throw new Error("DIMY のデータベースの設定がありません。");
   const sb = createClient(new URL(raw).origin, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { error } = await sb.from("cards").insert({ user_id: owner, ...card });
+  // 先にカードを出す（返事を待たせない）。写真はあとから探して書き足す（画面は Realtime の更新で差し替える）
+  const { data: row, error } = await sb.from("cards").insert({ user_id: owner, ...card }).select("id").single();
   if (error) throw new Error(`カードを出せませんでした（${error.message}）`);
-  return "画面にカードを出しました。";
+  if (needsImages(card)) {
+    addImages(card)
+      .then(() => sb.from("cards").update({ data: card.data }).eq("id", row.id))
+      .catch(() => {});
+  }
+  return "画面にカードを出しました。続けて返事の文章で、カードの中身の要点（場所や見出しの名前と一言など）を 1〜3 文で話してください（読み上げられます）。カードを出したことには触れないでください。";
+}
+
+function needsImages(card) {
+  if (card.kind === "list") return card.data.items.some((it) => !it.image && it.url);
+  return card.kind === "page" && !card.data.image;
 }
