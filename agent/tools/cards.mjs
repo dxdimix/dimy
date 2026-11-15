@@ -83,6 +83,8 @@ export function normalizeCard(a) {
     if (a.note) data.note = String(a.note).slice(0, 300);
     if ((kind === "page" || kind === "web") && isUrl(a.image)) data.image = a.image;
   }
+  // 返事の中で、このカードを出したい言葉（画面は、読み上げがこの言葉を含む文に来たときに出す）
+  if (a.say) data.say = String(a.say).slice(0, 60);
   return { kind, title, data };
 }
 
@@ -213,7 +215,7 @@ export async function showCard(a) {
       .then(() => sb.from("cards").update({ data: card.data }).eq("id", rows[i].id))
       .catch(() => {});
   });
-  return `画面にカードを ${list.length} 枚出しました。話の続きがあれば、次の 1 文を書き、その文に合うカードがあれば、また show_card を呼んでください（話す文とカードを交互に）。もう話すことがなければ、何も書き足さずに終えてください。「調べますね」などの前置きは答えではありません。答えをまだ話していなければ、必ず中身（名前・時間・距離など）を話してください。「すでにお話ししたとおり」「カードに出しました」のような中身のない文は書かないでください。`;
+  return `画面にカードを ${list.length} 枚出しました（say を付けたカードは、読み上げがその言葉に来たときに出ます）。答え（名前・時間・料金などの中身）をまだ文章で書いていなければ、今書いてください。カードの say の言葉を、その文にそのまま入れてください。すでに書いていれば、何も書き足さずに終えてください。「調べますね」などの前置きは答えではありません。「すでにお話ししたとおり」「カードに出しました」のような中身のない文は書かないでください。`;
 }
 
 function needsImages(card) {

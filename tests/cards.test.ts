@@ -99,3 +99,17 @@ describe("道順と写真のリンク", () => {
     expect(googleImagesUrl("瀬戸大橋")).toBe("https://www.google.com/search?q=%E7%80%AC%E6%88%B8%E5%A4%A7%E6%A9%8B&udm=2&hl=ja");
   });
 });
+
+import { sayMatches, splitSentences } from "../src/lib/cards";
+
+describe("話に合わせてカードを出す", () => {
+  it("読み上げている文にカードの言葉が入っているか", () => {
+    expect(sayMatches("料金: 小学生は 3,200 円です。", "料金")).toBe(true);
+    expect(sayMatches("チューピー コースターは 110cm 以上です。", "チューピーコースター|乗れるもの")).toBe(true);
+    expect(sayMatches("営業時間は日によって違います。", "料金")).toBe(false);
+    expect(sayMatches("何でも", undefined)).toBe(true);
+  });
+  it("1 文ずつに分ける", () => {
+    expect(splitSentences("向いています。乗れるもの: メリーゴーランド。料金は？")).toEqual(["向いています。", "乗れるもの: メリーゴーランド。", "料金は？"]);
+  });
+});

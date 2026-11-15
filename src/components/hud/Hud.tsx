@@ -8,7 +8,7 @@
 
 import { captureScreen, shrinkImage, useDimyExtension, useIsDimyPc } from "@/lib/extension";
 import { Showcase } from "./Showcase";
-import { BUILTIN_TITLE, builtinCardsFor, chatCard, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
+import { BUILTIN_TITLE, builtinCardsFor, chatCard, sayMatches, splitSentences, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -167,6 +167,15 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [cards, setCards] = useState<Card[]>([]);
   // いまの会話（あなたの発言）と、その間に出たカード。次の会話に移ってもカードを呼び出せるよう、表 card_snapshots に控える
   const turnRef = useRef<{ id: string; cards: Map<string, Card> } | null>(null);
+  // 話に合わせてカードを出す（利用者の希望）: DIMY のカードに say（出したい言葉）があれば、読み上げがその言葉を含む文に来るまで隠す
+  const spokenSoFar = useRef(""); // この返事で読み始めた文
+  const replyDone = useRef(true); // 返事を書き終えたか（読み終えたら、残りのカードを全部出す）
+  const speakOnRef = useRef(true);
+  const revealCardsFor = useCallback((sentence: string) => {
+    spokenSoFar.current += sentence;
+    setCards((prev) => (prev.some((c) => c.hidden && sayMatches(sentence, c.data.say)) ? prev.map((c) => (c.hidden && sayMatches(sentence, c.data.say) ? { ...c, hidden: false } : c)) : prev));
+  }, []);
+  const revealAllCards = useCallback(() => setCards((prev) => (prev.some((c) => c.hidden) ? prev.map((c) => (c.hidden ? { ...c, hidden: false } : c)) : prev)), []);
   const router = useRouter();
   const [panel, setPanel] = useState<"none" | "chat" | "settings" | "bookmarks" | "pin" | "palette" | "weather" | "calendar" | "admin" | "menu">("none");
   const panelRef = useRef(panel);
@@ -178,6 +187,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [pendingLink, setPendingLink] = useState<Bookmark | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [speakOn, setSpeakOn] = useState(true);
+  useEffect(() => {
+    speakOnRef.current = speakOn;
+  }, [speakOn]);
   const [wakeOn, setWakeOn] = useState(false);
   // スマホ（iPhone・Android など）では、呼びかけ（いつも聞いている状態）を使わない。
   // iPhone の Safari は、ページを開くたびにマイクの許可を求めるので、開いただけでマイクを使うと毎回許可を聞かれる（利用者の指摘）。
@@ -260,6 +272,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         if (payload.eventType === "INSERT" && (payload.new as Message).role === "user") {
           const kinds = builtinCardsFor((payload.new as Message).content);
           turnRef.current = { id: (payload.new as Message).id, cards: new Map() };
+          spokenSoFar.current = "";
+          replyDone.current = false;
           setCards((prev) => [
             ...prev.filter((c) => c.pinned),
             ...kinds.map((k) => ({ id: `builtin-${k}-${(payload.new as Message).id}`, kind: k, title: BUILTIN_TITLE[k], data: {}, pinned: false, at: Date.now() })),
@@ -289,8 +303,13 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       .channel("hud-cards")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cards" }, (payload) => {
         const row = payload.new as { id: string; kind: CardKind; title: string; data: CardData };
-        setCards((prev) => (prev.some((c) => c.id === row.id) ? prev : [...prev, { id: row.id, kind: row.kind, title: row.title, data: row.data ?? {}, pinned: false, at: Date.now() }]));
-        logActivity(supabase, "card", `画面のカード（DIMY）: ${row.kind} ${row.title}`);
+        const say = row.data?.say;
+        // 読み上げがまだその言葉に来ていなければ隠しておく（声を出さない画面・読み終えたあとは、すぐ出す）
+        const hidden = Boolean(say) && speakOnRef.current && leaderRef.current && !replyDone.current && !sayMatches(spokenSoFar.current, say);
+        setCards((prev) => (prev.some((c) => c.id === row.id) ? prev : [...prev, { id: row.id, kind: row.kind, title: row.title, data: row.data ?? {}, pinned: false, at: Date.now(), hidden }]));
+        // 念のため: 40 秒たっても出ていなければ出す（読み上げの知らせが来なかったときなど）
+        if (hidden) setTimeout(() => setCards((prev) => prev.map((c) => (c.id === row.id && c.hidden ? { ...c, hidden: false } : c))), 40_000);
+        logActivity(supabase, "card", `画面のカード（DIMY）: ${row.kind} ${row.title}${hidden ? `（「${say}」を話すときに出す）` : ""}`);
       })
       // あとから写真が書き足されたとき
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cards" }, (payload) => {
@@ -301,7 +320,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [supabase, leaderRef]);
 
   // 会話の控え: その会話の間に出たカードを、閉じたものも含めて残す（1 秒まとめて書く）
   useEffect(() => {
@@ -355,7 +374,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     try {
       const saved = JSON.parse(getPref(cardsKey()) ?? getPref(`device.${deviceId()}.pinnedCards`) ?? "[]") as Card[];
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 開いたときに、出ていたカードを戻す
-      if (saved.length) setCards((prev) => [...saved.filter((c) => !prev.some((p) => p.id === c.id)), ...prev]);
+      if (saved.length) setCards((prev) => [...saved.filter((c) => !prev.some((p) => p.id === c.id)).map((c) => ({ ...c, hidden: false })), ...prev]);
     } catch {
       /* 読めなければ何もしない */
     }
@@ -476,6 +495,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
 
   const speaker = useSpeaker(() => {
     setCaptionUntil(Date.now() + captionSec * 1000);
+    // 返事を読み終えたら、まだ隠れているカードを全部出す
+    if (replyDone.current) revealAllCards();
     if (followUpAfterSpeech.current) {
       followUpAfterSpeech.current = false;
       wakeRef.current?.followUp();
@@ -486,7 +507,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     pitch: loadNumber(PITCH_KEY, NaN) || undefined,
     volume: loadNumber(VOLUME_KEY, NaN),
   });
-  const { speak: speakRaw, cancel: cancelSpeech } = speaker;
+  const { speak: speakRaw, cancel: cancelSpeech, isSpeaking } = speaker;
   // 声・速さ・高さ・大きさも、設定が変わったら（ほかの端末で変えたときも）読み直す
   const { setVoiceName, setRate, setPitch, setVolume } = speaker;
   useEffect(() => {
@@ -500,7 +521,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     if (Number.isFinite(vo)) setVolume(Math.min(1, Math.max(0, vo)));
   }, [prefsVersion, setVoiceName, setRate, setPitch, setVolume]);
   const speak = useCallback(
-    (text: string) => {
+    (text: string, onStart?: () => void) => {
       // 念のため: 同じ文を 5 秒以内に 2 回読まない
       const norm = (t: string) => t.replace(/[\s、。,.!！?？]/g, "");
       if (recentSpoken.current.some((x) => Date.now() - x.at < 5_000 && norm(x.text) === norm(text))) {
@@ -509,7 +530,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       }
       logActivity(supabase, "speak", text);
       recentSpoken.current = [...recentSpoken.current.filter((x) => Date.now() - x.at < 60_000), { text, at: Date.now() }];
-      speakRaw(text);
+      speakRaw(text, onStart);
     },
     [speakRaw, supabase],
   );
@@ -633,19 +654,22 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       const from = spokenUpTo.current.get(m.id) ?? 0;
       const { chunk, next } = takeSpeakable(m.content, from, final, from === 0 ? 0 : 40);
       spokenUpTo.current.set(m.id, next);
-      if (speakOn && chunk && leaderRef.current) speak(toSpeech(chunk));
+      // 1 文ずつ読み、読み始めた文に合うカード（say）を出す（話に合わせて 1 枚ずつ見せる。利用者の希望）
+      if (speakOn && chunk && leaderRef.current) for (const sentence of splitSentences(toSpeech(chunk))) speak(sentence, () => revealCardsFor(sentence));
+      else if (chunk) revealCardsFor(chunk);
       if (final) {
         liveIds.current.delete(m.id);
+        replyDone.current = true;
+        if (!speakOn || !leaderRef.current || !isSpeaking()) revealAllCards();
         // 呼びかけを待つ設定なら、言い終えたあと 8 秒は続けて話せるようにする
         if (wakeOn && !isPhone) {
           if (speakOn) followUpAfterSpeech.current = true;
           else wakeRef.current?.followUp();
         }
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- 返事が届いた時刻から字幕を出す
         setCaptionUntil(Date.now() + captionSec * 1000);
       }
     }
-  }, [messages, speak, speakOn, wakeOn, isPhone, captionSec, leaderRef]);
+  }, [messages, speak, speakOn, wakeOn, isPhone, captionSec, leaderRef, isSpeaking, revealAllCards, revealCardsFor]);
 
   // 画面を消さない（ずっと表示しておくため）。対応していないブラウザでは何もしない。
   useEffect(() => {
@@ -1004,6 +1028,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     else setPanel(key);
   }
 
+  // 話に合わせて出すため、まだ隠しているカードは出さない
+  const visibleCards = cards.filter((c) => !c.hidden);
+
   const time = now?.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
   const date = now?.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", weekday: "short" });
   const pcLabel = online ? "PC オンライン" : online === false ? "PC オフライン" : "PC 確認中";
@@ -1014,7 +1041,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       <HudChrome now={now} mode={mode} online={online} messages={messages} todayCount={todayCount} pinCount={pins.pins.length} onPick={(m) => void recall(m.role === "user" ? m.id : (m.reply_to ?? m.id))} />
 
       <Showcase
-        cards={cards}
+        cards={visibleCards}
         onClose={(id) => setCards((prev) => prev.filter((c) => c.id !== id))}
         onPin={(id) => setCards((prev) => prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)))}
         onCloseAll={() => {

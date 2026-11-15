@@ -46,7 +46,7 @@ export const TOOLS = [
       properties: {
         cards: {
           type: "array",
-          description: "何枚かを 1 回で出すとき（最大 6 枚）。各要素は kind・title と、その種類の中身（items / places / url / stats / points / text など）。1 枚だけなら cards を使わず直接書いてよい。",
+          description: "何枚かを 1 回で出すとき（最大 6 枚。各カードに say を付けると、話に合わせて 1 枚ずつ出る）。各要素は kind・title と、その種類の中身（items / places / url / stats / points / text など）。1 枚だけなら cards を使わず直接書いてよい。",
           items: { type: "object" },
         },
         kind: { type: "string", enum: ["place", "list", "map", "video", "stats", "points", "page", "web", "image", "text"] },
@@ -74,6 +74,7 @@ export const TOOLS = [
         prices: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } } } },
         phone: { type: "string" },
         count: { type: "number", description: "image: 探す写真の枚数（1〜4）" },
+        say: { type: "string", description: "返事の文章の中で、このカードを出したい言葉（その文にそのまま出てくる短い言葉。例: 料金 / チューピーコースター / 営業時間）。画面は読み上げがこの言葉に来たときにカードを出す。「|」で言い換えを並べられる" },
         stats: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" }, unit: { type: "string" } } } },
         points: { type: "array", items: { type: "string" } },
         style: { type: "string", enum: ["points", "steps"] },

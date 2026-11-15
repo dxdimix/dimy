@@ -7,6 +7,8 @@ export type CardData = {
   places?: { name: string; query: string; note?: string; from?: string }[];
   /** image: 言葉で探した写真（PC の DIMY が Wikimedia Commons から探して書き足す） */
   images?: { url: string; title: string; page: string }[];
+  /** 返事の中で、このカードを出したい言葉（読み上げがこの言葉を含む文に来たら出す。「|」で言い換えを並べられる） */
+  say?: string;
   count?: number;
   /** place: 施設 1 か所分 */
   area?: string;
@@ -33,6 +35,8 @@ export type Card = {
   data: CardData;
   pinned: boolean;
   at: number;
+  /** 読み上げがこの言葉（say）に来るまで隠しておく（話に合わせて 1 枚ずつ出すため） */
+  hidden?: boolean;
   /** 利用者がドラッグで好きな場所に置いたカード（画面の中の位置と大きさ。px）。列には並べない */
   float?: { x: number; y: number; w: number; h?: number };
 };
@@ -174,4 +178,24 @@ export function youtubeId(url: string): string | null {
 /** Google 画像検索のページ（写真のカードで、デスクトップでは中にそのまま出す） */
 export function googleImagesUrl(query: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=2&hl=ja`;
+}
+
+/** 読み上げている文に、カードを出す言葉（say）が入っているか。空白・記号・大文字小文字の違いは見ない。「|」「、」で区切った言い換えのどれかが入っていればよい */
+export function sayMatches(sentence: string, say?: string): boolean {
+  if (!say) return true;
+  const norm = (t: string) => t.toLowerCase().replace(/[\s、。,.!！?？・「」『』（）()*:：\-]/g, "");
+  const s = norm(sentence);
+  return say
+    .split(/[|｜、,]/)
+    .map(norm)
+    .filter(Boolean)
+    .some((w) => s.includes(w));
+}
+
+/** 読み上げる文を 1 文ずつに分ける（文ごとに、合うカードを出すため） */
+export function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[。！？!?])/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 }

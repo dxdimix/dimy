@@ -47,9 +47,11 @@ export function useSpeaker(
   const voice = pickJapaneseVoice(voices, voiceName);
 
   const speak = useCallback(
-    (text: string) => {
+    (text: string, onStart?: () => void) => {
       if (!supported || !text) return;
       const u = new SpeechSynthesisUtterance(text);
+      // 読み始めたときの知らせ（話に合わせてカードを出すため）
+      if (onStart) u.onstart = onStart;
       u.lang = "ja-JP";
       if (voice) u.voice = voice;
       u.rate = rate;
