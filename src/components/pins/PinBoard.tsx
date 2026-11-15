@@ -6,6 +6,7 @@
 // - 上の帯をつかんで動かす。四辺と四隅をつかんで、大きさを自由に変える。鍵で位置を固定。
 // - 位置と大きさは置き場所（メイン画面 / パレット）ごとに覚えておく（src/lib/pins.ts）。映像は画面を開き直したら選び直す。
 
+import { hasDimyExtension } from "@/lib/extension";
 import { CardBody } from "@/components/hud/Showcase";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -182,7 +183,8 @@ export function usePinBoard(board: string, session: Session) {
   // 中に表示できるページかを調べる（できなければ、映像で映すように案内する）
   const checkFrame = useCallback(
     async (id: string, url: string) => {
-      if (sameSite(url)) return;
+      // 拡張機能があれば、どのページも中に表示できるので調べない
+      if (sameSite(url) || hasDimyExtension()) return;
       try {
         const host = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "dimy.dxdimix.com" : location.hostname;
         const res = await fetch(`/api/frame-check?url=${encodeURIComponent(url)}&host=${encodeURIComponent(host)}`, {
@@ -692,7 +694,7 @@ export function PinBoard({
 
               {/* 中身 */}
               <div data-pin-content className="relative min-h-0 flex-1 overflow-hidden">
-                {pin.kind === "web" && !pin.blocked && (
+                {pin.kind === "web" && (!pin.blocked || hasDimyExtension()) && (
                   <iframe
                     key={`${pin.url}#${pin.rev ?? 0}`}
                     src={pin.url}
@@ -708,7 +710,7 @@ export function PinBoard({
                     <CardBody card={pin.card} session={state.session} weather={null} place={null} onOpenLink={(u) => window.open(u, "_blank", "noopener")} onOpenPage={(u) => window.open(u, "_blank", "noopener")} />
                   </div>
                 )}
-                {pin.kind === "web" && pin.blocked && (
+                {pin.kind === "web" && pin.blocked && !hasDimyExtension() && (
                   <div className="grid h-full place-items-center p-4 text-center text-xs text-slate-300">
                     <div className="space-y-3">
                       <p>このページは、ほかの画面の中に表示することを禁止しています。</p>

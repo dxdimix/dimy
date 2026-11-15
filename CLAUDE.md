@@ -44,7 +44,13 @@ PC の中に住む個人用 AI アシスタント。コンセプトは「いつ�
 - 強制停止（マイクの左のボタン・Esc・声の「ストップ」「止めて」「終わり」など）: 読み上げ・聞き取り・続けて話せる時間をやめ、Broadcast（`dimy-control` の `stop`）で常駐プログラムに返事作りをやめさせる（`ClaudeSession.cancel()`。そこまでの返事は「（ここで止めました）」を付けて残し、返事待ちの発言は error「止めました」にする）。止めた発言への返事は、あとから届いても読まない。
 - 自分の声を拾わない（`useWakeWord`）: 返事を作っている・読み上げている間（と読み終えて 1.2 秒）は止める言葉だけを受け付ける。最近読み上げた文とほぼ同じ言葉は自分の声とみなして捨てる（`isEcho`）。続けて話せる状態にするときは、聞き取り途中のものを捨てて聞き直す。
 - 話し終わりを待つ時間（設定の「聞き取り」、0.5〜3 秒、既定 1.5 秒）: ブラウザに任せず聞き続け、無音がこの時間続いたら送る。マイクのボタン・右 Ctrl で終えたときはすぐ送る。
-- ディミの中で開くのは、利用者が作ったアプリだけ。それ以外（YouTube・Google の検索、ブックマーク、Claude）は PC のディミが Chrome で開く（利用者の決まり）。画面が表 `pc_commands` に命令を入れ（本人だけが入れられる RLS）、常駐プログラムが本人の命令か・2 分以内かを確かめて実行する（`agent/lib/pc.mjs`）。PC がオフラインなら、このブラウザで開く。
+- DIMY の Chrome の拡張機能（`extension/`。利用者が選んだ方式。デスクトップのアプリ（Electron）は声の聞き取り＝Chrome の Web Speech API が使えないのでやめた）: PC の DIMY のフォルダ（`C:\Users\sike1\dimy\extension`）を Chrome の「パッケージ化されていない拡張機能を読み込む」で入れる。自動更新でフォルダが新しくなると、1 分以内に自分を読み込み直す（`manifest.json` の version を見る。**拡張機能を変えたら必ず version を上げる**）。
+  - ディミのタブの中の枠（iframe）だけ、ページの「中に表示しないで」の印（X-Frame-Options・CSP など）を外す（`rules.json` と、ディミのタブに対する session rule。枠の中でリンクを押して進んだページにも効く）。ほかのタブ・普段の Chrome には効かない。
+  - 拡張機能があると、カードのリンク・「小窓で開く」・取り出したリンクは、ディミの中の Web のカード（kind `web`、`webCard`。正面に大きく・ピン留め・帯で動かせる・パレットへ移せる）で開く。帯の右上のボタンで Chrome でも開ける。固定ウィンドウも、表示の禁止を気にせず中に出す。枠には sandbox（いちばん上の画面への移動を禁止）を付ける（`WEB_FRAME_SANDBOX`）。
+  - ログインは普段の Chrome と同じ情報を使うが、サイトによっては枠の中ではログインの情報が送られず、ログインしていない表示になる（Cookie の SameSite。拡張機能では変えられない）。Google のログイン画面など、枠の中を拒む仕組みが別にあるページもある。
+  - 画面の写真: 保守の窓口の `npm run maint -- screenshot <保存先.jpg>` で頼むと、開いて見えているディミの画面が拡張機能で撮り（`captureScreen`）、表 `screen_shots` に入れる（`20261116200000_screen_shots.sql`）。頼まれたときだけ撮る。撮るのはディミのタブの見えている部分だけ。開発用セッションは、これで画面を見て確かめる。
+  - 画面は、拡張機能のあり・なしと版を `logActivity` に残す（`useDimyExtension`）。
+- ディミの中で開くのは、利用者が作ったアプリだけ（拡張機能がある端末では、カードから開くページもディミの中で開く。上の項目）。それ以外（YouTube・Google の検索、ブックマーク、Claude）は PC のディミが Chrome で開く（利用者の決まり）。画面が表 `pc_commands` に命令を入れ（本人だけが入れられる RLS）、常駐プログラムが本人の命令か・2 分以内かを確かめて実行する（`agent/lib/pc.mjs`）。PC がオフラインなら、このブラウザで開く。
   - アカウント = Chrome のプロフィール（Chrome の並び順で 1, 2, …）。開くアカウントは、言葉の指定（「アカウント2で〇〇」・プロフィールの名前）→ 設定の「アカウント」タブのサイトごとの指定（表 `user_settings` の key `site_accounts`。どの端末でも共通。以前のブラウザの保存 `dimy.siteAccounts` は、データベースが空なら引き継ぐ。YouTube・Google・Gmail・カレンダーなど、`*` はそれ以外）→ マスターアカウント（利用者のメールアドレスのプロフィール。`DIMY_OWNER_EMAIL`、`pickProfile`）の順に決める。プロフィールには呼び名を付けられる（設定の「アカウント」タブ。表 `user_settings` の key `account_nicknames` = { フォルダ名: 呼び名 }。端末をまたいで同じ。「〇〇のアカウントで」「〇〇アカウントで」で呼べる。Claude の `chrome_accounts` も呼び名を出す）。1 番目のプロフィールにはしない（ログインしていないことがあるため）。
   - 開く場所は端末ごとに選ぶ（設定の「アカウント」タブ、`dimy.openOn`）: 「DIMY が動いているデスクトップ PC の Chrome」（既定。スマホは既定で「この端末」）か「この端末のブラウザ」（ノート・スマホ向け。アカウントの指定は使わない）。PC に頼んで 15 秒返事がない・開けなかったときは、この端末で開くボタンを出す。常駐プログラムは命令の通知が切れたら 30 秒ごとにつなぎ直し、5 秒ごとにも返事待ちの命令を確かめる。
   - 会話の欄に文字で打った「YouTube を開いて」なども、声と同じく画面と PC で済ませる（`Chat` の `onLocalCommand`）。
@@ -99,7 +105,7 @@ PC の中に住む個人用 AI アシスタント。コンセプトは「いつ�
 
 ## クラウドのセッションから DIMY を見る・再起動する（保守の窓口）
 - `supabase/migrations/20261115500000_maintenance.sql` の窓口で、クラウドの開発用セッションからも記録を読み、PC の DIMY に再起動（最新版の取り込み）を頼める。できるのは「読む」と「再起動を頼む」だけ。
-- 使い方: `npm run maint -- read messages 50`（会話）／`read agent_logs 100`（PC の DIMY の記録）／`read activity_log`（画面の動作）／`read pc_commands`（PC への命令）／`read pc_state`（Chrome のプロフィールなど）／`npm run maint -- restart`（再起動を頼んで結果を待つ）。
+- 使い方: `npm run maint -- screenshot dimy-screen.jpg`（ディミの画面の写真。拡張機能が必要）／`npm run maint -- read messages 50`（会話）／`read agent_logs 100`（PC の DIMY の記録）／`read activity_log`（画面の動作）／`read pc_commands`（PC への命令）／`read pc_state`（Chrome のプロフィールなど）／`npm run maint -- restart`（再起動を頼んで結果を待つ）。
 - 必要なもの: 環境変数 `DIMY_MAINT_URL`（Supabase の URL）と `DIMY_MAINT_ANON`（publishable キー。秘密ではない）、合言葉（見出し `dimy-maint-key`。クラウドの環境の「ネットワークの秘密」に保存し、通信のときに自動で付く。リポジトリやチャットには書かない）。合言葉は SQL Editor で `select public.dimy_maint_new_key('メモ');` を実行して作る。無効にするときは `delete from public.maintenance_keys;`。
 - 「覚えていること」（`kymis_notes`）も直せる（`20261115700000_maintenance_notes.sql`）: `read notes`（id 付き。使っていないものも）／`read feedback`（GOOD / BAD と、その返事・発言）／`note-add <style|fact|rule> <中身>`／`note-edit <id> <中身> [種類]`／`note-off <id>`・`note-on <id>`（消さずに使わないようにする・戻す）。直すと PC の DIMY が次の発言で Claude Code を起動し直して反映する。返事の質に関わるので、利用者から返事の直し方を言われたら、評価と覚えていることを読んで、必要なら直す（直した内容は利用者に伝える）。
 - 利用者から DIMY の不具合を相談されたら、クラウドのセッションでも、まずこれで記録を読んでから答える。直して main に push したら `npm run maint -- restart` で PC の DIMY に最新版を取り込ませ、記録で直ったかを確かめる。

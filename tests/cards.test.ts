@@ -75,3 +75,14 @@ describe("会話のカード", () => {
     expect(snapshotCards([c])).toEqual([]);
   });
 });
+
+import { webCard } from "../src/lib/cards";
+
+describe("Web ページのカード", () => {
+  it("正面に大きく、ピン留めで出す", () => {
+    const c = webCard("https://www.youtube.com/", "YouTube", 1920, 1080);
+    expect(c.kind).toBe("web");
+    expect(c.pinned).toBe(true);
+    expect(c.float).toEqual({ x: 410, y: 96, w: 1100, h: 694 });
+  });
+});

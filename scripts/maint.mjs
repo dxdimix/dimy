@@ -8,9 +8,11 @@
 //   node scripts/maint.mjs note-add <style|fact|rule> <中身>
 //   node scripts/maint.mjs note-edit <id> <中身> [style|fact|rule]
 //   node scripts/maint.mjs note-off <id> / note-on <id>   … 使わないようにする / 戻す（消さない）
+//   node scripts/maint.mjs screenshot [保存先.jpg]   … 開いているディミの画面の写真を撮ってもらい、保存する（拡張機能が必要）
 // 必要な環境変数（秘密ではない）: DIMY_MAINT_URL（Supabase の URL）、DIMY_MAINT_ANON（publishable キー）
 // 合言葉（dimy-maint-key）は、この環境の通信の仕組み（ネットワークの秘密の保存）が自動で付ける。ここには書かない。
 
+import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
 // クラウドの作業環境では、通信が中継（HTTPS_PROXY）を通る。Node の fetch は中継を使う設定が要るので、付けて起動し直す
@@ -69,6 +71,25 @@ try {
       }
     }
     console.log("60 秒待ちましたが、PC の DIMY から返事がありません（PC が止まっているか、古い版の可能性）。");
+  } else if (cmd === "screenshot") {
+    const file = what || "dimy-screen.jpg";
+    const id = await rpc("dimy_maint_screenshot", {});
+    console.log(`画面の写真を頼みました（${id}）。待っています…`);
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const row = await rpc("dimy_maint_screenshot_get", { p_id: id });
+      if (row?.status === "done" && row.image) {
+        fs.writeFileSync(file, Buffer.from(String(row.image).replace(/^data:image\/\w+;base64,/, ""), "base64"));
+        console.log(`保存しました: ${file}（画面の大きさ ${row.note ?? "不明"}）`);
+        process.exit(0);
+      }
+      if (row?.status === "error") {
+        console.log(`撮れませんでした: ${row.note}`);
+        process.exit(1);
+      }
+    }
+    console.log("30 秒待ちましたが、写真が届きません（ディミの画面が開いていない・見えていない、または拡張機能がない可能性）。");
+    process.exit(1);
   } else {
     console.log("使い方: node scripts/maint.mjs read <messages|agent_logs|activity_log|pc_commands|pc_state> [件数] / node scripts/maint.mjs restart");
   }

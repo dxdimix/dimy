@@ -18,6 +18,7 @@ import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOp
 import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 import { getPref } from "@/lib/prefs";
+import { hasDimyExtension, WEB_FRAME_SANDBOX } from "@/lib/extension";
 
 const TZ = "Asia/Tokyo";
 
@@ -26,8 +27,10 @@ type Props = {
   onClose: (id: string) => void;
   onPin: (id: string) => void;
   onCloseAll: () => void;
-  /** リンクを開く（DIMY の外で開く決まりに合わせる） */
+  /** リンクを開く（拡張機能があればディミの中の Web のカード、なければ Chrome） */
   onOpenLink: (url: string, title: string) => void;
+  /** Chrome で開く（ボタンの「Chrome で開く」） */
+  onOpenChrome: (url: string, title: string) => void;
   /** ページを固定ウィンドウで開く */
   onOpenPage: (url: string, title: string) => void;
   /** カードの中のリンク・場所を枠の外へドラッグして離したとき、それだけを別のカードにする */
@@ -285,6 +288,7 @@ function CardView({
   onClose,
   onPin,
   onOpenLink,
+  onOpenChrome,
   onOpenPage,
   onUpdate,
   onGrab,
@@ -294,7 +298,7 @@ function CardView({
   place,
   session,
 }: Props & { card: Card; side: "left" | "right"; onGrab: (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => void; floating?: boolean }) {
-  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT" }[card.kind];
+  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT", web: "WEB" }[card.kind];
   return (
     <div
       data-card-id={card.id}
@@ -313,6 +317,11 @@ function CardView({
       >
         <span className="font-mono text-xs tracking-[0.3em] text-cyan-400/80">{head}</span>
         <span className="min-w-0 flex-1 truncate text-xl font-semibold text-cyan-50">{card.title}</span>
+        {card.kind === "web" && card.data.url && (
+          <button onClick={() => onOpenChrome(card.data.url!, card.title)} title="Chrome で開く" className="p-1 text-cyan-400/70 hover:text-cyan-100">
+            <ExternalIcon className="h-5 w-5" />
+          </button>
+        )}
         <button onClick={() => onPin(card.id)} title={card.pinned ? "残すのをやめる" : "残す（次の質問でも消えない）"} className={"p-1 " + (card.pinned ? "text-cyan-100" : "text-cyan-400/60 hover:text-cyan-100")}>
           <PinIcon className="h-5 w-5" />
         </button>
@@ -322,9 +331,13 @@ function CardView({
       </div>
       {card.kind === "chat" ? (
         <div className="-mx-4 -mb-4 min-h-0 flex-1 overflow-hidden text-base">{renderChat()}</div>
+      ) : card.kind === "web" ? (
+        <div className="-mx-4 -mb-4 min-h-0 flex-1 overflow-hidden rounded-b-xl">
+          <WebFrame url={card.data.url ?? ""} title={card.title} />
+        </div>
       ) : (
       <div className={floating ? "-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin]" : ""}>
-        <CardBody card={card} onOpenLink={onOpenLink} onOpenPage={onOpenPage} weather={weather} place={place} session={session} />
+        <CardBody card={card} onOpenLink={onOpenLink} onOpenChrome={onOpenChrome} onOpenPage={onOpenPage} weather={weather} place={place} session={session} />
       </div>
       )}
       {floating && (
@@ -346,6 +359,7 @@ function CardView({
 export function CardBody({
   card,
   onOpenLink,
+  onOpenChrome = onOpenLink,
   onOpenPage,
   weather,
   place,
@@ -353,6 +367,7 @@ export function CardBody({
 }: {
   card: Card;
   onOpenLink: (url: string, title: string) => void;
+  onOpenChrome?: (url: string, title: string) => void;
   onOpenPage: (url: string, title: string) => void;
   weather: Weather | null;
   place: Place | null;
@@ -364,6 +379,11 @@ export function CardBody({
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}
       {card.kind === "chat" && <p className="text-base text-slate-400">会話は、メイン画面の会話のカードで使えます。</p>}
+      {card.kind === "web" && card.data.url && (
+        <div className="h-full min-h-[300px]">
+          <WebFrame url={card.data.url} title={card.title} />
+        </div>
+      )}
       {card.kind === "talk" && (
         <div className="space-y-3">
           {card.data.at && <div className="font-mono text-sm text-cyan-300/80">{new Date(card.data.at).toLocaleString("ja-JP", { timeZone: TZ, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>}
@@ -438,7 +458,7 @@ export function CardBody({
             <button onClick={() => onOpenPage(card.data.url!, card.title)} className="rounded-md border border-cyan-500/50 px-3 py-1.5 text-cyan-100 hover:bg-cyan-400/10">
               小窓で開く
             </button>
-            <button onClick={() => onOpenLink(card.data.url!, card.title)} className="flex items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 hover:bg-slate-800">
+            <button onClick={() => onOpenChrome(card.data.url!, card.title)} className="flex items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 hover:bg-slate-800">
               <ExternalIcon className="h-4 w-4" />
               Chrome で開く
             </button>
@@ -454,7 +474,14 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
   const items = card.data.items ?? [];
   const open = (it: (typeof items)[number]) => it.url && onOpenLink(it.url, it.title);
   const drag = (it: (typeof items)[number]) =>
-    it.url ? dragOut({ from: card.id, kind: "page", title: it.title, data: { url: it.url, image: it.image, note: it.note } }) : {};
+    it.url
+      ? // 拡張機能があれば、取り出したリンクはページそのもの（web）のカードにする
+        dragOut(
+          hasDimyExtension()
+            ? { from: card.id, kind: "web", title: it.title, data: { url: it.url } }
+            : { from: card.id, kind: "page", title: it.title, data: { url: it.url, image: it.image, note: it.note } },
+        )
+      : {};
   if (!items.some((it) => it.image))
     return (
       <ol className="space-y-2.5">
@@ -506,6 +533,29 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
         </div>
       )}
     </div>
+  );
+}
+
+/** ディミの画面の中で開いた Web ページ（拡張機能が「中に表示しないで」の印を外す） */
+function WebFrame({ url, title }: { url: string; title: string }) {
+  if (!hasDimyExtension())
+    return (
+      <div className="grid h-full place-items-center p-6 text-center text-base text-slate-300">
+        <p>
+          この端末の Chrome には DIMY の拡張機能が入っていないため、ページを中に表示できないことがあります。
+          <br />
+          右上のボタンで Chrome で開けます。
+        </p>
+      </div>
+    );
+  return (
+    <iframe
+      src={url}
+      title={title}
+      sandbox={WEB_FRAME_SANDBOX}
+      allow="autoplay; fullscreen; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; geolocation"
+      className="h-full w-full bg-white"
+    />
   );
 }
 

@@ -1,6 +1,6 @@
 // 画面のカード（返事の中身を目でも見せる）の形と、言葉から出すカードを決める決まり。
 
-export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat";
+export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat" | "web";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
@@ -130,4 +130,20 @@ export function chatCard(vw: number, vh: number): Card {
   const top = vw < 768 ? 64 : 96;
   const h = Math.max(320, vh - top - (vw < 768 ? 280 : 290));
   return { id: "chat", kind: "chat", title: "会話", data: {}, pinned: true, at: Date.now() + 2e13, float: { x: Math.round((vw - w) / 2), y: top, w, h } };
+}
+
+/** Web ページのカード（拡張機能があるとき、ディミの画面の中でページをそのまま開く）。正面に大きく、字幕にかからない高さで出す。利用者が開いたものなのでピン留め */
+export function webCard(url: string, title: string, vw: number, vh: number): Card {
+  const w = Math.min(1100, vw - 160);
+  const top = vw < 768 ? 64 : 96;
+  const h = Math.max(320, vh - top - (vw < 768 ? 280 : 290));
+  return {
+    id: `web-${Date.now()}`,
+    kind: "web",
+    title: title || url,
+    data: { url },
+    pinned: true,
+    at: Date.now() + 1e13,
+    float: { x: Math.round((vw - w) / 2), y: top, w, h },
+  };
 }

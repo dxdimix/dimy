@@ -6,8 +6,9 @@
 // - 右上のアイコン: 会話（履歴と文字入力のパネル）、ブックマーク、覚えていること、設定、全画面
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
+import { captureScreen, shrinkImage, useDimyExtension } from "@/lib/extension";
 import { Showcase } from "./Showcase";
-import { BUILTIN_TITLE, builtinCardsFor, chatCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
+import { BUILTIN_TITLE, builtinCardsFor, chatCard, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -355,6 +356,46 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     }, 800);
     return () => clearTimeout(t);
   }, [cards]);
+
+  // DIMY の Chrome の拡張機能（入っていれば、ディミの画面の中でどのページも開ける）
+  const extVersion = useDimyExtension();
+  useEffect(() => {
+    logActivity(supabase, "ui", extVersion ? `DIMY の拡張機能: あり（${extVersion}）` : "DIMY の拡張機能: なし");
+  }, [extVersion, supabase]);
+  /** ページをディミの画面の中で開く（Web のカード。正面に大きく・ピン留め） */
+  function openWebCard(url: string, title: string) {
+    setCards((prev) => [...prev, webCard(url, title, window.innerWidth, window.innerHeight)]);
+    logActivity(supabase, "card", `ページをディミの中で開いた: ${title} ${url}`);
+  }
+
+  // 画面の写真（クラウドの開発用セッションから頼まれたとき。表 screen_shots。拡張機能で撮る）
+  useEffect(() => {
+    const ch = supabase
+      .channel("hud-screenshots")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "screen_shots" }, async (payload) => {
+        const row = payload.new as { id: string; status: string };
+        if (row.status !== "requested" || document.visibilityState !== "visible") return;
+        try {
+          const image = await shrinkImage(await captureScreen());
+          await supabase
+            .from("screen_shots")
+            .update({ status: "done", image, note: `${window.innerWidth}×${window.innerHeight}`, done_at: new Date().toISOString() })
+            .eq("id", row.id)
+            .eq("status", "requested");
+          logActivity(supabase, "ui", "開発用のセッションに頼まれて、画面の写真を撮った");
+        } catch (e) {
+          await supabase
+            .from("screen_shots")
+            .update({ status: "error", note: e instanceof Error ? e.message : String(e), done_at: new Date().toISOString() })
+            .eq("id", row.id)
+            .eq("status", "requested");
+        }
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [supabase]);
 
   /** 会話（文字入力と会話の履歴）のカードを開く・閉じる。正面に、最初からピン留めで出す（利用者の決まり） */
   const chatOpen = cards.some((c) => c.kind === "chat");
@@ -964,8 +1005,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           logActivity(supabase, "card", `カードをすべて閉じた（${cards.length} 枚）`);
           setCards([]);
         }}
-        onOpenLink={(url, title) => void openOutside(url, title, null, undefined, true)}
-        onOpenPage={(url, title) => pins.addWeb(url, undefined, title)}
+        onOpenLink={(url, title) => (extVersion ? openWebCard(url, title) : void openOutside(url, title, null, undefined, true))}
+        onOpenChrome={(url, title) => void openOutside(url, title, null, undefined, true)}
+        onOpenPage={(url, title) => (extVersion ? openWebCard(url, title) : pins.addWeb(url, undefined, title))}
         onExtract={extractCard}
         onUpdate={(id, patch) => setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))}
         onDropOut={dropCardOut}
