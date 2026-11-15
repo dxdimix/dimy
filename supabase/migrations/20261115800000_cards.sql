@@ -5,8 +5,8 @@
 create table public.cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
-  -- list（一覧）/ video（動画）/ points（要点・手順の図）/ page（ページ）/ image（画像）/ text（文）
-  kind text not null check (kind in ('list', 'video', 'points', 'page', 'image', 'text')),
+  -- list（一覧）/ video（動画）/ points（要点・手順の図）/ page（ページ）/ image（画像）/ text（文）/ stats（大事な数字）
+  kind text not null check (kind in ('list', 'video', 'points', 'page', 'image', 'text', 'stats')),
   title text not null default '',
   data jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()

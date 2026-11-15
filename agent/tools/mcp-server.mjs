@@ -33,18 +33,26 @@ export const TOOLS = [
   {
     name: "show_card",
     description:
-      "利用者の画面に、話の中身を目で見せるカードを出す（返事を読み上げている間に、画面の端に出る）。返事の文章を書き終えてから使う（返事を遅らせない）。" +
-      "kind: list = 一覧（ニュースの見出しなど。items に title・url・note）/ video = 動画（YouTube の url）/ points = 要点や手順の図（points に短い文の配列。手順なら style: steps）" +
-      " / page = ページ（url）/ image = 画像（url）/ text = 短い文（text）。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
+      "利用者の画面に、話の中身を目で見せるカードを出す（返事を読み上げている間に、球体の左右に大きく出る）。返事の文章を書き終えてから使う（返事を遅らせない）。" +
+      "文字だけより、写真・動画・図で見せることを優先する。" +
+      "kind: list = 一覧（ニュースなど。items に title・url・note・image。image を省くと、url のページの見出し画像を自動で添える）" +
+      " / video = 動画（YouTube の url。画面の中で再生できる）/ stats = 大事な数字（stats に label・value・unit。例: 日経平均 / 38,500 / 円）" +
+      " / points = 要点や手順の図（points に短い文の配列。手順なら style: steps）/ page = ページ（url。見出し画像を自動で添える）/ image = 画像（画像そのものの url）/ text = 短い文（text）。" +
+      "文の中の大事な数字や言葉は **太字** で囲める。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
     inputSchema: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["list", "video", "points", "page", "image", "text"] },
+        kind: { type: "string", enum: ["list", "video", "stats", "points", "page", "image", "text"] },
         title: { type: "string", description: "カードの見出し（短く）" },
-        items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" }, note: { type: "string" } } } },
+        items: {
+          type: "array",
+          items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" }, note: { type: "string" }, image: { type: "string", description: "写真の URL（省くとページから探す）" } } },
+        },
+        stats: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" }, unit: { type: "string" } } } },
         points: { type: "array", items: { type: "string" } },
         style: { type: "string", enum: ["points", "steps"] },
         url: { type: "string" },
+        image: { type: "string" },
         note: { type: "string" },
         text: { type: "string" },
       },

@@ -15,3 +15,18 @@ describe("画面のカード", () => {
     expect(youtubeEmbed("https://example.com/watch?v=abc")).toBeNull();
   });
 });
+
+import { emphasize } from "../src/lib/cards";
+
+describe("強調", () => {
+  it("**で囲んだところと数字を強調する", () => {
+    expect(emphasize("最高 **18°** で降水確率 30% です")).toEqual([
+      { text: "最高 ", strong: false },
+      { text: "18°", strong: true },
+      { text: " で降水確率 ", strong: false },
+      { text: "30%", strong: true },
+      { text: " です", strong: false },
+    ]);
+    expect(emphasize("数字なし")).toEqual([{ text: "数字なし", strong: false }]);
+  });
+});
