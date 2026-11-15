@@ -6,6 +6,7 @@
 // - 上の帯をつかんで動かす。四辺と四隅をつかんで、大きさを自由に変える。鍵で位置を固定。
 // - 位置と大きさは置き場所（メイン画面 / パレット）ごとに覚えておく（src/lib/pins.ts）。映像は画面を開き直したら選び直す。
 
+import { CardBody } from "@/components/hud/Showcase";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -303,7 +304,7 @@ export function usePinBoard(board: string, session: Session) {
   /** モニター上の点（screenX, screenY）にある、ほかのディミの画面へ送る。送れたら true */
   const dropTo = useCallback(
     (pin: Pin, screenX: number, screenY: number, grab: { x: number; y: number }) => {
-      if (pin.kind !== "web") return false;
+      if (pin.kind === "capture") return false;
       // モニターごとに拡大率が違うと座標が少しずれるので、画面の外 120px までは、いちばん近い画面に入れる
       let best: { b: string; r: { x: number; y: number; w: number; h: number }; d: number } | null = null;
       for (const [b, r] of others.current) {
@@ -330,7 +331,7 @@ export function usePinBoard(board: string, session: Session) {
    */
   const dropToNewPalette = useCallback(
     async (pin: Pin, screenX: number, screenY: number, grab: { x: number; y: number }) => {
-      if (pin.kind !== "web") return false;
+      if (pin.kind === "capture") return false;
       const screens = await getScreens();
       if (!screens) return false;
       const i = screenIndexAt(screens, screenX, screenY);
@@ -371,7 +372,7 @@ export function usePinBoard(board: string, session: Session) {
     return () => window.removeEventListener("resize", rescue);
   }, [loaded]);
 
-  return { board, pins, streams, update, front, remove, addWeb, addCapture, send, view, setView, reload, dropTo, dropToNewPalette, setSlots, toBoard };
+  return { board, pins, streams, update, front, remove, addWeb, addCapture, send, view, setView, reload, dropTo, dropToNewPalette, setSlots, toBoard, session };
 }
 
 export type PinBoardState = ReturnType<typeof usePinBoard>;
@@ -701,6 +702,11 @@ export function PinBoard({
                     className={"block bg-white " + (busy ? "pointer-events-none" : "")}
                     allow="clipboard-read; clipboard-write; fullscreen"
                   />
+                )}
+                {pin.kind === "card" && pin.card && (
+                  <div className={"h-full overflow-y-auto bg-slate-950/90 p-4 text-lg text-slate-100 [scrollbar-width:thin] " + (busy ? "pointer-events-none" : "")} style={{ zoom }}>
+                    <CardBody card={pin.card} session={state.session} weather={null} place={null} onOpenLink={(u) => window.open(u, "_blank", "noopener")} onOpenPage={(u) => window.open(u, "_blank", "noopener")} />
+                  </div>
                 )}
                 {pin.kind === "web" && pin.blocked && (
                   <div className="grid h-full place-items-center p-4 text-center text-xs text-slate-300">

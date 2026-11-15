@@ -23,18 +23,24 @@ export type Card = {
   data: CardData;
   pinned: boolean;
   at: number;
-  /** 出す側を決めたカード（ドラッグで取り出したもの）。その側のいちばん上に出す */
-  side?: "left" | "right";
+  /** 利用者がドラッグで好きな場所に置いたカード（画面の中の位置と大きさ。px）。列には並べない */
+  float?: { x: number; y: number; w: number; h?: number };
 };
 
-/** カードを左右の列に分ける。側の決まったカードはその列の上に、ほかは右・左の互い違いに並べる */
+/** 列に並べるカードを左右に分ける（右・左の互い違い）。好きな場所に置いたカードは除く */
 export function splitColumns(cards: Card[]): { left: Card[]; right: Card[] } {
   const left: Card[] = [];
   const right: Card[] = [];
   let n = 0;
-  for (const c of cards) if (!c.side) (n++ % 2 === 0 ? right : left).push(c);
-  const fixed = cards.filter((c) => c.side).reverse(); // 新しく取り出したものほど上
-  return { left: [...fixed.filter((c) => c.side === "left"), ...left], right: [...fixed.filter((c) => c.side === "right"), ...right] };
+  for (const c of cards) if (!c.float) (n++ % 2 === 0 ? right : left).push(c);
+  return { left, right };
+}
+
+/** 置き場所を画面の中に収める（帯が画面の外に出て、つかめなくならないように） */
+export function clampFloat(f: { x: number; y: number; w: number; h?: number }, vw: number, vh: number) {
+  const w = Math.max(280, Math.min(f.w, vw - 16));
+  const h = f.h === undefined ? undefined : Math.max(160, Math.min(f.h, vh - 16));
+  return { x: Math.round(Math.max(8 - w + 120, Math.min(f.x, vw - 120))), y: Math.round(Math.max(8, Math.min(f.y, vh - 48))), w: Math.round(w), h: h === undefined ? undefined : Math.round(h) };
 }
 
 /**
@@ -115,5 +121,5 @@ export type CardDrag = { from: string; kind: CardKind; title: string; data: Card
 
 /** 会話の控えに残す形（ピンの有無と、呼び出した会話のカードは残さない） */
 export function snapshotCards(cards: Card[]): Card[] {
-  return cards.filter((c) => c.kind !== "talk").map((c) => ({ ...c, pinned: false, side: undefined }));
+  return cards.filter((c) => c.kind !== "talk").map((c) => ({ ...c, pinned: false, float: undefined }));
 }

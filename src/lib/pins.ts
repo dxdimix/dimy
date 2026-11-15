@@ -6,14 +6,18 @@
 
 
 import { getPref, prefKeys, setPref } from "./prefs";
+import type { Card } from "./cards";
 
-export type PinKind = "web" | "capture";
+/** web: ページ / capture: 画面の映像 / card: メイン画面から移した「画面のカード」 */
+export type PinKind = "web" | "capture" | "card";
 
 export type Pin = {
   id: string;
   kind: PinKind;
   /** web: 開くページ */
   url?: string;
+  /** card: カードの中身 */
+  card?: Card;
   title: string;
   x: number;
   y: number;

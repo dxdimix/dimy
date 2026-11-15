@@ -154,7 +154,7 @@ export function HudChrome(o: {
       <TimeTape now={o.now} />
 
       {/* 右: システムの計器 */}
-      <div className="absolute right-6 top-1/2 hidden w-44 -translate-y-1/2 space-y-3 font-mono text-[10px] lg:block">
+      <div className="absolute right-6 top-1/2 z-[800] hidden w-44 -translate-y-1/2 space-y-3 rounded bg-slate-950/40 font-mono text-[10px] lg:block">
         <div className="mb-1 flex items-center gap-2 text-cyan-300/70">
           <span className="h-px flex-1 bg-cyan-400/30" />
           <span className="tracking-[0.35em]">SYSTEM</span>
@@ -167,7 +167,7 @@ export function HudChrome(o: {
       </div>
 
       {/* 右下寄り: 最近の出来事 */}
-      <div className="pointer-events-auto absolute bottom-24 right-6 hidden w-56 space-y-1 font-mono text-[10px] lg:block">
+      <div className="pointer-events-auto absolute bottom-24 right-6 z-[800] hidden w-56 space-y-1 rounded bg-slate-950/40 font-mono text-[10px] lg:block">
         <div className="mb-1 flex items-center gap-2 text-cyan-300/70">
           <span className="h-px flex-1 bg-cyan-400/30" />
           <span className="tracking-[0.35em]">LOG</span>

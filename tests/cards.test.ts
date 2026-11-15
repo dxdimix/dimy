@@ -49,13 +49,17 @@ describe("会話の控え", () => {
   });
 });
 
-import { splitColumns } from "../src/lib/cards";
+import { clampFloat, splitColumns } from "../src/lib/cards";
 
-describe("左右の列", () => {
-  it("取り出したカードは離した側の上、ほかは右・左の互い違い", () => {
-    const c = (id: string, side?: "left" | "right") => ({ id, kind: "text" as const, title: id, data: {}, pinned: false, at: 0, side });
-    const r = splitColumns([c("a"), c("b"), c("c"), c("x", "left"), c("y", "left")]);
+describe("左右の列と、好きな場所", () => {
+  it("好きな場所に置いたカードは列に入れない。ほかは右・左の互い違い", () => {
+    const c = (id: string, float?: { x: number; y: number; w: number }) => ({ id, kind: "text" as const, title: id, data: {}, pinned: false, at: 0, float });
+    const r = splitColumns([c("a"), c("x", { x: 0, y: 0, w: 300 }), c("b"), c("c")]);
     expect(r.right.map((x) => x.id)).toEqual(["a", "c"]);
-    expect(r.left.map((x) => x.id)).toEqual(["y", "x", "b"]);
+    expect(r.left.map((x) => x.id)).toEqual(["b"]);
+  });
+  it("画面の中に収める", () => {
+    expect(clampFloat({ x: 5000, y: -50, w: 3000 }, 1920, 1080)).toEqual({ x: 1800, y: 8, w: 1904, h: undefined });
+    expect(clampFloat({ x: 100, y: 100, w: 100, h: 50 }, 1920, 1080)).toEqual({ x: 100, y: 100, w: 280, h: 160 });
   });
 });

@@ -7,7 +7,7 @@
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
 import { Showcase } from "./Showcase";
-import { BUILTIN_TITLE, builtinCardsFor, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
+import { BUILTIN_TITLE, builtinCardsFor, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -34,7 +34,7 @@ import {
 } from "@/lib/commands";
 import { loadPcState, sendPcCommand, type PcState } from "@/lib/pc";
 import { loadUserSetting, NICKNAMES_KEY, saveUserSetting, SITE_ACCOUNTS_KEY as SHARED_SITE_ACCOUNTS_KEY } from "@/lib/userSettings";
-import { boardLabel, loadPins, savePins, sendPin } from "@/lib/pins";
+import { boardLabel, loadPins, newPinId, savePins, sendPin, type Pin } from "@/lib/pins";
 import { Chat } from "@/components/Chat";
 import { APPS, detectOpenCommand } from "@/lib/apps";
 import { matchBookmark, type Bookmark } from "@/lib/bookmarks";
@@ -333,10 +333,49 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     [supabase],
   );
 
+  // 残す（ピン留めの）カードは、この端末に控える（画面を読み込み直しても、消すまで残す。利用者の決まり）
+  const pinnedKey = () => `device.${deviceId()}.pinnedCards`;
+  const cardsLoaded = useRef(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(getPref(pinnedKey()) ?? "[]") as Card[];
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 開いたときに、残していたカードを戻す
+      if (saved.length) setCards((prev) => [...saved.filter((c) => !prev.some((p) => p.id === c.id)), ...prev]);
+    } catch {
+      /* 読めなければ何もしない */
+    }
+    cardsLoaded.current = true;
+  }, []);
+  useEffect(() => {
+    if (!cardsLoaded.current) return;
+    const t = setTimeout(() => {
+      const keep = cards.filter((c) => c.pinned && c.kind !== "talk");
+      const next = JSON.stringify(keep);
+      if (next !== (getPref(pinnedKey()) ?? "[]")) setPref(pinnedKey(), next);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [cards]);
+
+  /** カードをブラウザのウィンドウの外で離したとき: そのモニターのパレットへ、固定ウィンドウとして移す */
+  async function dropCardOut(card: Card, screenX: number, screenY: number, grab: { x: number; y: number }) {
+    const f = card.float ?? { x: 0, y: 0, w: 520 };
+    const pin: Pin = { id: newPinId(), kind: "card", card: { ...card, float: undefined, pinned: true }, title: card.title, x: 0, y: 0, w: Math.round(f.w), h: Math.round(f.h ?? 560), z: 10 };
+    let ok = pins.dropTo(pin, screenX, screenY, grab);
+    if (!ok) ok = await pins.dropToNewPalette(pin, screenX, screenY, grab);
+    if (ok) {
+      setCards((prev) => prev.filter((c) => c.id !== card.id));
+      logActivity(supabase, "card", `カードをパレットへ移した: ${card.title}`);
+    }
+    return ok;
+  }
+
   /** カードの中のリンク・場所を外へドラッグしたとき: それだけのカードを作って残す */
   const extractCard = useCallback(
-    (c: Omit<CardDrag, "from">, side: "left" | "right") => {
-      setCards((prev) => [...prev, { ...c, id: `x-${Date.now()}`, pinned: true, at: Date.now(), side }]);
+    (c: Omit<CardDrag, "from">, at: { x: number; y: number }) => {
+      // 離した場所に置く（帯の真ん中あたりが指の位置に来るように）
+      const w = Math.min(520, window.innerWidth - 16);
+      const float = clampFloat({ x: at.x - w / 2, y: at.y - 24, w }, window.innerWidth, window.innerHeight);
+      setCards((prev) => [...prev, { ...c, id: `x-${Date.now()}`, pinned: true, at: Date.now() + 1e13, float }]);
       logActivity(supabase, "card", `カードから取り出して残した: ${c.title}`);
     },
     [supabase],
@@ -404,9 +443,10 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   // 画面からのお知らせ（「FX を開きます」など）。字幕に少しだけ出す
   const [notice, setNotice] = useState<{ text: string; until: number } | null>(null);
   const announce = useCallback(
-    (text: string) => {
+    (text: string, quiet = false) => {
       setNotice({ text, until: Date.now() + 6000 });
-      if (speakOn && leaderRef.current) speak(toSpeech(text));
+      // ボタンで操作したときは読み上げない（利用者の決まり。声で頼んだときだけ話す）
+      if (!quiet && speakOn && leaderRef.current) speak(toSpeech(text));
     },
     [speak, speakOn, leaderRef],
   );
@@ -645,7 +685,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
    * ディミの外（Chrome）で開く。PC が動いていれば PC が Chrome で開く。開くアカウント（Chrome のプロフィール）は:
    * 言葉で指定（「アカウント2で」）→ 設定のサイトごとのアカウント → 設定の「指定がないとき」→ マスターアカウント（PC が決める）
    */
-  async function openOutside(url: string, title: string, account: number | null, site?: string) {
+  async function openOutside(url: string, title: string, account: number | null, site?: string, quiet = false) {
     const profile = account ? undefined : (site && siteAccounts[site]) || siteAccounts["*"];
     const who = account
       ? `アカウント${account}`
@@ -654,21 +694,21 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         : "マスターアカウント";
     logActivity(supabase, "open_chrome", `${title} ${url}（${openOn === "here" ? "この端末のブラウザ" : who}）`);
     if (online && openOn === "pc") {
-      announce(`${title}を開きます`);
+      announce(`${title}を開きます`, quiet);
       const r = await sendPcCommand(supabase, "open_url", { url, ...(account ? { account } : profile ? { profile } : {}) }, 15_000);
       if (r.ok) return;
       if (r.sent) {
         // PC から返事がない・開けなかった: このブラウザで開くボタンを出す
         logActivity(supabase, "error", `PC で開けませんでした: ${r.result}`);
         setPendingLink({ title, url, folder: "" });
-        return announce(`${r.result || "PC で開けませんでした"} 下のボタンを押すと、この端末で開きます`);
+        return announce(`${r.result || "PC で開けませんでした"} 下のボタンを押すと、この端末で開きます`, quiet);
       }
       // 表がまだないなど、PC に送れなかったときは、このブラウザで開く
     }
     if (window.open(url, "_blank") === null) {
       setPendingLink({ title, url, folder: "" });
-      announce(`${title}は、下のボタンを押すと開きます`);
-    } else announce(`${title}を開きます`);
+      announce(`${title}は、下のボタンを押すと開きます`, quiet);
+    } else announce(`${title}を開きます`, quiet);
   }
 
   /** 固定ウィンドウをまとめて移す（声の「モニター4のパレットに移して」など）。移した数を返す */
@@ -904,9 +944,11 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           logActivity(supabase, "card", `カードをすべて閉じた（${cards.length} 枚）`);
           setCards([]);
         }}
-        onOpenLink={(url, title) => void openOutside(url, title, null)}
+        onOpenLink={(url, title) => void openOutside(url, title, null, undefined, true)}
         onOpenPage={(url, title) => pins.addWeb(url, undefined, title)}
         onExtract={extractCard}
+        onUpdate={(id, patch) => setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))}
+        onDropOut={dropCardOut}
         weather={weather}
         place={place}
         session={session}
@@ -941,7 +983,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       </div>
 
       {/* 左上：PC の状態 */}
-      <div className="absolute left-5 top-5 flex items-center gap-2" title={pcLabel} aria-label={pcLabel}>
+      <div className="absolute left-5 top-5 z-[800] flex items-center gap-2" title={pcLabel} aria-label={pcLabel}>
         <PcIcon className={"h-6 w-6 " + (online ? "text-cyan-300" : "text-slate-500")} />
         <span
           className={
@@ -991,7 +1033,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       <button
         onClick={() => setPanel(panel === "calendar" ? "none" : "calendar")}
         data-panel-toggle
-        className="absolute bottom-6 left-6 rounded-lg px-2 py-1 text-left font-mono transition hover:bg-cyan-400/10"
+        className="absolute bottom-6 left-6 z-[800] rounded-lg px-2 py-1 text-left font-mono transition hover:bg-cyan-400/10"
         title="カレンダー（Google カレンダーの予定）"
         aria-label="カレンダーを開く"
       >
@@ -1005,7 +1047,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         <button
           onClick={() => setPanel(panel === "weather" ? "none" : "weather")}
           data-panel-toggle
-          className="absolute bottom-6 right-6 flex items-center gap-3 rounded-lg px-2 py-1 text-left transition hover:bg-cyan-400/10"
+          className="absolute bottom-6 right-6 z-[800] flex items-center gap-3 rounded-lg px-2 py-1 text-left transition hover:bg-cyan-400/10"
           title={`${place?.name} ${weather.text ?? weatherLabel(weather.code)}（${weather.source}。押すと詳しく）`}
           aria-label="天気の詳細"
         >

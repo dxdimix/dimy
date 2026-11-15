@@ -7,13 +7,17 @@
 // - 一覧（写真つき）・動画・数字・要点の図・ページ・画像・文は、DIMY が返事を書いたあとに出す（表 cards）
 // - 各カードに「残す」（次の質問でも消えない）と「閉じる」。上に「すべて閉じる」
 // - スマホなど幅の狭い画面では、上に 1 列で出す
+// - DIMY が出したカードは決まった列に並べる。利用者がドラッグしたカード（帯をつかむ・中のリンクを外へ出す）は、
+//   画面の中の好きな場所に置け、右下の角で大きさを変えられる（利用者の決まり）
+// - カードは、周りのボタンや表記（右上のボタン・左のアイコン・日時・天気・SYSTEM・LOG・字幕・マイク）より後ろに出す
 
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
-import { CARD_DRAG_TYPE, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
+import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
 import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
+import { getPref } from "@/lib/prefs";
 
 const TZ = "Asia/Tokyo";
 
@@ -27,7 +31,11 @@ type Props = {
   /** ページを固定ウィンドウで開く */
   onOpenPage: (url: string, title: string) => void;
   /** カードの中のリンク・場所を枠の外へドラッグして離したとき、それだけを別のカードにする */
-  onExtract: (c: Omit<CardDrag, "from">, side: "left" | "right") => void;
+  onExtract: (c: Omit<CardDrag, "from">, at: { x: number; y: number }) => void;
+  /** カードを動かした・大きさを変えた・前に出した */
+  onUpdate: (id: string, patch: Partial<Card>) => void;
+  /** カードを画面（ブラウザのウィンドウ）の外で離した: そこにあるパレットへ移す。移せたら true */
+  onDropOut: (card: Card, screenX: number, screenY: number, grab: { x: number; y: number }) => Promise<boolean>;
   weather: Weather | null;
   place: Place | null;
   session: Session;
@@ -82,7 +90,7 @@ export function Showcase(p: Props) {
         const d = JSON.parse(e.dataTransfer!.getData(CARD_DRAG_TYPE)) as CardDrag;
         const under = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-card-id]");
         if (under?.getAttribute("data-card-id") === d.from) return; // 元のカードの中で離した
-        onExtract({ kind: d.kind, title: d.title, data: d.data }, e.clientX < window.innerWidth / 2 ? "left" : "right");
+        onExtract({ kind: d.kind, title: d.title, data: d.data }, { x: e.clientX, y: e.clientY });
       } catch {
         /* 読めないものは無視 */
       }
@@ -94,7 +102,52 @@ export function Showcase(p: Props) {
       window.removeEventListener("drop", drop);
     };
   }, [onExtract]);
+  // 帯をつかんで動かす・右下の角で大きさを変える（列のカードは、動かし始めたら好きな場所のカードになる）
+  const { onUpdate, onDropOut } = p;
+  const [moving, setMoving] = useState(false);
+  const startDrag = (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => {
+    if (e.button !== 0 || (mode === "move" && (e.target as HTMLElement).closest("button"))) return;
+    e.preventDefault();
+    const el = (e.currentTarget as HTMLElement).closest("[data-card-id]") as HTMLElement | null;
+    // ウィンドウの外へ出ても指の動きを受け取り続ける（パレットへ移すため）
+    try {
+      document.documentElement.setPointerCapture(e.pointerId);
+    } catch {
+      /* 受け取れなくても、ウィンドウの中では動かせる */
+    }
+    const r = el?.getBoundingClientRect();
+    if (!r) return;
+    const start = card.float ?? { x: r.left, y: r.top, w: r.width };
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const startH = card.float?.h ?? r.height;
+    let begun = false;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx;
+      const dy = ev.clientY - sy;
+      if (!begun) {
+        if (Math.abs(dx) + Math.abs(dy) < 5) return;
+        begun = true;
+        setMoving(true);
+      }
+      const f =
+        mode === "move" ? { ...start, x: start.x + dx, y: start.y + dy } : { ...start, w: start.w + dx, h: startH + dy };
+      onUpdate(card.id, { float: clampFloat(f, window.innerWidth, window.innerHeight), pinned: true, at: Date.now() + 1e13 });
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setMoving(false);
+      if (!begun || mode !== "move") return;
+      // ブラウザのウィンドウの外で離した: そのモニターのパレットへ移す（移せなければ、画面の端に残る）
+      const outside = ev.clientX < 0 || ev.clientY < 0 || ev.clientX > window.innerWidth || ev.clientY > window.innerHeight;
+      if (outside) void onDropOut({ ...card, float: card.float ?? { ...start } }, ev.screenX, ev.screenY, { x: sx - start.x, y: sy - start.y });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   if (!p.cards.length) return null;
+  const floats = p.cards.filter((c) => c.float).sort((a, b) => a.at - b.at);
   const column = (list: Card[], side: "left" | "right" | "top") => {
     const style: CSSProperties =
       side === "top"
@@ -105,15 +158,23 @@ export function Showcase(p: Props) {
     return (
       <div style={style} className="pointer-events-none absolute z-[700] flex flex-col gap-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:thin]">
         {list.map((c) => (
-          <CardView key={c.id} card={c} side={side === "left" ? "left" : "right"} {...p} />
+          <CardView key={c.id} card={c} side={side === "left" ? "left" : "right"} {...p} onGrab={startDrag} />
         ))}
       </div>
     );
   };
   return (
     <>
+      {/* 好きな場所に置いたカード（新しく触ったものほど前） */}
+      {floats.map((c, i) => (
+        <div key={c.id} className="absolute flex flex-col" style={{ left: c.float!.x, top: c.float!.y, width: c.float!.w, height: c.float!.h, zIndex: 720 + i }}>
+          <CardView card={c} side="right" {...p} onGrab={startDrag} floating />
+        </div>
+      ))}
+      {/* 動かしている間は、地図や動画（iframe）に指の動きを取られないよう、透明な板をかぶせる */}
+      {moving && <div className="fixed inset-0 z-[990] cursor-grabbing" />}
       {narrow ? (
-        column(p.cards, "top")
+        column(p.cards.filter((c) => !c.float), "top")
       ) : (
         <>
           {column(splitColumns(p.cards).right, "right")}
@@ -123,7 +184,7 @@ export function Showcase(p: Props) {
       <button
         onClick={p.onCloseAll}
         className={
-          "absolute z-[710] rounded-full border border-cyan-400/40 bg-slate-950/85 px-4 py-1.5 text-sm text-cyan-100 backdrop-blur hover:border-cyan-300/80 " +
+          "absolute z-[790] rounded-full border border-cyan-400/40 bg-slate-950/85 px-4 py-1.5 text-sm text-cyan-100 backdrop-blur hover:border-cyan-300/80 " +
           (narrow ? "bottom-[17rem] right-3" : "left-1/2 top-[4.4rem] -translate-x-1/2")
         }
         title="出ているカードをすべて閉じる（残したものも閉じる）"
@@ -171,18 +232,37 @@ const host = (u: string) => {
   }
 };
 
-function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather, place, session }: Props & { card: Card; side: "left" | "right" }) {
+function CardView({
+  card,
+  side,
+  onClose,
+  onPin,
+  onOpenLink,
+  onOpenPage,
+  onUpdate,
+  onGrab,
+  floating = false,
+  weather,
+  place,
+  session,
+}: Props & { card: Card; side: "left" | "right"; onGrab: (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => void; floating?: boolean }) {
   const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY" }[card.kind];
   return (
     <div
       data-card-id={card.id}
+      onPointerDown={() => floating && onUpdate(card.id, { at: Date.now() + 1e13 })}
       className={
+        (floating ? "relative flex min-h-0 flex-1 flex-col overflow-hidden " : "") +
         "pointer-events-auto shrink-0 rounded-xl border bg-slate-950/88 p-4 text-lg text-slate-100 shadow-[0_0_32px_rgba(34,211,238,0.18)] backdrop-blur " +
         (card.pinned ? "border-cyan-300/80" : "border-cyan-400/35") +
         (side === "right" ? " dimy-card-in-right" : " dimy-card-in-left")
       }
     >
-      <div className="mb-3 flex items-center gap-3">
+      <div
+        onPointerDown={(e) => onGrab(card, e, "move")}
+        className="mb-3 flex shrink-0 cursor-grab touch-none select-none items-center gap-3"
+        title="帯をつかんで、好きな場所へ動かせます"
+      >
         <span className="font-mono text-xs tracking-[0.3em] text-cyan-400/80">{head}</span>
         <span className="min-w-0 flex-1 truncate text-xl font-semibold text-cyan-50">{card.title}</span>
         <button onClick={() => onPin(card.id)} title={card.pinned ? "残すのをやめる" : "残す（次の質問でも消えない）"} className={"p-1 " + (card.pinned ? "text-cyan-100" : "text-cyan-400/60 hover:text-cyan-100")}>
@@ -192,6 +272,42 @@ function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather,
           <CloseIcon className="h-6 w-6" />
         </button>
       </div>
+      <div className={floating ? "-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin]" : ""}>
+        <CardBody card={card} onOpenLink={onOpenLink} onOpenPage={onOpenPage} weather={weather} place={place} session={session} />
+      </div>
+      {floating && (
+        <div
+          onPointerDown={(e) => onGrab(card, e, "resize")}
+          className="absolute bottom-0 right-0 h-5 w-5 cursor-nwse-resize touch-none"
+          title="角をつかんで、大きさを変えられます"
+        >
+          <svg viewBox="0 0 20 20" className="h-full w-full text-cyan-300/70">
+            <path d="M18 8v10H8M18 13v5h-5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** カードの中身（メイン画面のカードと、パレットへ移したカードの両方で使う） */
+export function CardBody({
+  card,
+  onOpenLink,
+  onOpenPage,
+  weather,
+  place,
+  session,
+}: {
+  card: Card;
+  onOpenLink: (url: string, title: string) => void;
+  onOpenPage: (url: string, title: string) => void;
+  weather: Weather | null;
+  place: Place | null;
+  session: Session;
+}) {
+  return (
+    <>
       {card.kind === "weather" && <WeatherCard weather={weather} place={place} />}
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}
@@ -276,7 +392,7 @@ function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather,
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -470,7 +586,16 @@ function WeatherArt({ code, size = 40, night = false }: { code: number; size?: n
   );
 }
 
-function WeatherCard({ weather, place }: { weather: Weather | null; place: Place | null }) {
+function WeatherCard({ weather: given, place: givenPlace }: { weather: Weather | null; place: Place | null }) {
+  // パレットへ移したカードでは、地域を設定から読む
+  const [place] = useState<Place | null>(() => {
+    if (givenPlace) return givenPlace;
+    try {
+      return JSON.parse(getPref("weatherPlace") ?? "null") as Place | null;
+    } catch {
+      return null;
+    }
+  });
   const [jma, setJma] = useState<JmaResult | null>(null);
   const [fc, setFc] = useState<Forecast | null>(null);
   useEffect(() => {
@@ -484,6 +609,10 @@ function WeatherCard({ weather, place }: { weather: Weather | null; place: Place
   const days = (fc?.days ?? []).filter((d) => d.date >= today).slice(0, 5);
   const hours = (fc?.hours ?? []).slice(0, 24);
   const sun = fc?.days.find((d) => d.date === today);
+  // 今の天気（メイン画面からもらえないときは、1 時間ごとの予報の今の分を使う）
+  const weather: Weather | null =
+    given ??
+    (hours[0] && sun ? { temperature: hours[0].temperature, code: hours[0].code, max: sun.max, min: sun.min, rain: sun.rain, source: "Open-Meteo" } : null);
   const isNight = (time: string) => {
     const d = fc?.days.find((x) => x.date === time.slice(0, 10));
     return d ? time < d.sunrise || time > d.sunset : false;
