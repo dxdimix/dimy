@@ -226,6 +226,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [place, setPlace] = useState<Place | null>(null);
   const [error, setError] = useState("");
   const [captionUntil, setCaptionUntil] = useState(0);
+  // 返事の字幕は、次の会話を始めるか「カードをすべて閉じる」まで残す（利用者の決まり: 冒頭で何と言ったか分からなくならないように）
+  const [captionKept, setCaptionKept] = useState(false);
   // 天気の元（設定の「表示」タブ。既定は気象庁）
   const weatherSource: WeatherSource = getPref("weatherSource") === "open-meteo" ? "open-meteo" : "jma";
   const weather = useWeather(place, weatherSource);
@@ -285,6 +287,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           turnRef.current = { id: (payload.new as Message).id, cards: new Map() };
           spokenSoFar.current = "";
           replyDone.current = false;
+          setCaptionKept(false);
           queuedSentences.current = 0;
           setCards((prev) => [
             ...prev.filter((c) => c.pinned),
@@ -687,6 +690,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         }
         // eslint-disable-next-line react-hooks/set-state-in-effect -- 返事が届いた時刻から字幕を出す
         setCaptionUntil(Date.now() + captionSec * 1000);
+        setCaptionKept(true);
       }
     }
   }, [messages, speak, speakOn, wakeOn, isPhone, captionSec, leaderRef, isSpeaking, revealAllCards, revealCardsFor]);
@@ -722,7 +726,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const lastReply = [...messages].reverse().find((m) => m.role === "assistant");
   const noticeOn = notice !== null && now !== null && now.getTime() < notice.until;
   const showCaption =
-    recognition.listening || wakeListening || speaker.speaking || (lastReply?.status === "processing") || (now !== null && now.getTime() < captionUntil) || noticeOn;
+    recognition.listening || wakeListening || speaker.speaking || (lastReply?.status === "processing") || (now !== null && now.getTime() < captionUntil) || noticeOn || captionKept;
   // 字幕の枠（長い返事は、いちばん下＝読んでいるところへ自動で送る）
   const captionRef = useRef<HTMLDivElement>(null);
   const captionFollow = useRef(true);
@@ -1067,6 +1071,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         onCloseAll={() => {
           logActivity(supabase, "card", `カードをすべて閉じた（${cards.length} 枚）`);
           setCards([]);
+          setCaptionKept(false);
         }}
         onOpenLink={(url, title) => (extVersion ? openWebCard(url, title) : void openOutside(url, title, null, undefined, true))}
         onOpenChrome={(url, title) => void openOutside(url, title, null, undefined, true)}
@@ -1099,11 +1104,11 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         </div>
       </div>
 
-      {/* 字幕（話している・聞いている間と、返事のあと少しだけ） */}
+      {/* 字幕（話している・聞いている間と、返事のあとは次の会話か「カードをすべて閉じる」まで。右上の × でも閉じる） */}
       {/* 長いときは省かずに、枠の中でスクロールして全文を出す（書き足されるたびに、いちばん下へ送る） */}
       <div
         className={
-          "absolute inset-x-0 bottom-32 z-[850] mx-auto max-w-2xl px-6 transition-opacity duration-700 " +
+          "absolute inset-x-0 bottom-32 z-[850] mx-auto max-w-2xl px-6 transition-opacity duration-700 [&:hover_.caption-close]:opacity-100 " +
           (showCaption && caption ? "opacity-100" : "pointer-events-none opacity-0")
         }
       >
@@ -1118,6 +1123,20 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         >
           <p className="whitespace-pre-wrap pt-2">{caption}</p>
         </div>
+        {captionKept && !speaker.speaking && (
+          <button
+            onClick={() => {
+              setCaptionKept(false);
+              setCaptionUntil(0);
+              logActivity(supabase, "ui", "字幕を閉じた");
+            }}
+            aria-label="字幕を閉じる"
+            title="字幕を閉じる"
+            className="caption-close absolute -top-2 right-5 grid h-6 w-6 place-items-center rounded-full border border-cyan-400/40 bg-slate-950/90 text-cyan-300 opacity-60 transition hover:text-cyan-100"
+          >
+            <CloseIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* 左上：PC の状態 */}
