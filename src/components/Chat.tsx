@@ -200,9 +200,10 @@ export function Chat({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
     const text = input;
+    if (!text.trim()) return;
     setInput("");
     if (!(await send(text))) setInput(text);
   }
@@ -418,20 +419,33 @@ export function Chat({
           {error || recognition.error}
         </p>
       )}
-      <form onSubmit={onSubmit} className="flex gap-2 pb-4">
-        <input
+      <form onSubmit={onSubmit} className="flex items-end gap-2 pb-4">
+        {/* Enter で送る・Shift + Enter で改行（日本語の変換を確定する Enter では送らない）。行が増えたら 6 行まで広がる */}
+        <textarea
           autoFocus={embedded}
+          rows={1}
           value={recognition.listening ? recognition.interim : input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+              e.preventDefault();
+              void onSubmit();
+            }
+          }}
+          ref={(el) => {
+            if (!el) return;
+            el.style.height = "auto";
+            el.style.height = `${Math.min(el.scrollHeight, 6 * 24 + 18)}px`;
+          }}
           readOnly={recognition.listening}
           placeholder={
             recognition.listening
               ? "聞いています…"
               : waiting
                 ? "返事を待っています…"
-                : "ディミに話しかける"
+                : "DIMY に話しかける（Shift + Enter で改行）"
           }
-          className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="min-w-0 flex-1 resize-none rounded border border-slate-700 bg-slate-900 px-3 py-2 leading-6"
         />
         {!embedded && recognition.supported && (
           <button
