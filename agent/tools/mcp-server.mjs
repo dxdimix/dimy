@@ -13,6 +13,7 @@ import { listClaudeSessions, profilesNow, runCommand } from "../lib/pc.mjs";
 import { calendarAdd, calendarEvents } from "./calendar.mjs";
 import { readUserSetting } from "./settings.mjs";
 import { weatherForecast } from "./weather.mjs";
+import { showCard } from "./cards.mjs";
 
 const SERVER = { name: "dimy", version: "1.0.0" };
 
@@ -29,6 +30,28 @@ const where = {
 const noLog = () => {};
 
 export const TOOLS = [
+  {
+    name: "show_card",
+    description:
+      "利用者の画面に、話の中身を目で見せるカードを出す（返事を読み上げている間に、画面の端に出る）。返事の文章を書き終えてから使う（返事を遅らせない）。" +
+      "kind: list = 一覧（ニュースの見出しなど。items に title・url・note）/ video = 動画（YouTube の url）/ points = 要点や手順の図（points に短い文の配列。手順なら style: steps）" +
+      " / page = ページ（url）/ image = 画像（url）/ text = 短い文（text）。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["list", "video", "points", "page", "image", "text"] },
+        title: { type: "string", description: "カードの見出し（短く）" },
+        items: { type: "array", items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" }, note: { type: "string" } } } },
+        points: { type: "array", items: { type: "string" } },
+        style: { type: "string", enum: ["points", "steps"] },
+        url: { type: "string" },
+        note: { type: "string" },
+        text: { type: "string" },
+      },
+      required: ["kind", "title"],
+    },
+    call: (a) => showCard(a),
+  },
   {
     name: "weather_forecast",
     description:

@@ -10,6 +10,7 @@ describe("ディミの道具（MCP サーバー）", () => {
     expect(init?.result?.serverInfo?.name).toBe("dimy");
     const list = await handle({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     expect(list?.result?.tools?.map((t) => t.name)).toEqual([
+      "show_card",
       "weather_forecast",
       "calendar_events",
       "calendar_add",
@@ -41,5 +42,20 @@ describe("ディミの道具（MCP サーバー）", () => {
   it("知らない道具はエラーにする", async () => {
     const res = await handle({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "delete_rows", arguments: {} } });
     expect(res?.error?.message).toContain("知らない道具");
+  });
+});
+
+import { normalizeCard } from "../agent/tools/cards.mjs";
+
+describe("カードの中身を整える", () => {
+  it("一覧・要点・動画", () => {
+    expect(normalizeCard({ kind: "list", title: "今日のニュース", items: [{ title: "見出し", url: "https://example.com/a" }, { title: "" }] })).toEqual({
+      kind: "list",
+      title: "今日のニュース",
+      data: { items: [{ title: "見出し", url: "https://example.com/a", note: undefined }] },
+    });
+    expect(normalizeCard({ kind: "points", title: "手順", points: ["a", "b"], style: "steps" }).data).toEqual({ points: ["a", "b"], style: "steps" });
+    expect(() => normalizeCard({ kind: "video", title: "x", url: "javascript:alert(1)" })).toThrow("url");
+    expect(() => normalizeCard({ kind: "bad", title: "x" })).toThrow("kind");
   });
 });

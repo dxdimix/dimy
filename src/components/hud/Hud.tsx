@@ -6,6 +6,8 @@
 // - 右上のアイコン: 会話（履歴と文字入力のパネル）、ブックマーク、覚えていること、設定、全画面
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
+import { Showcase } from "./Showcase";
+import { BUILTIN_TITLE, builtinCardsFor, type Card, type CardData, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -157,6 +159,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const { leader: isLeader, leaderRef } = useActiveDevice(supabase);
   const now = useNow();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
   const [panel, setPanel] = useState<"none" | "chat" | "settings" | "bookmarks" | "pin" | "palette" | "weather" | "calendar" | "admin">("none");
   const panelRef = useRef(panel);
   // Chrome のブックマーク（PC のディミが写したもの）。表がまだないときは空のまま
@@ -237,6 +240,15 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         if (payload.eventType === "INSERT" && (payload.new as Message).role === "assistant") {
           liveIds.current.add((payload.new as Message).id);
         }
+        // 新しい発言: 残していないカードを片付け、言葉から分かるカード（天気・日付・予定）をすぐ出す
+        if (payload.eventType === "INSERT" && (payload.new as Message).role === "user") {
+          const kinds = builtinCardsFor((payload.new as Message).content);
+          setCards((prev) => [
+            ...prev.filter((c) => c.pinned),
+            ...kinds.map((k) => ({ id: `builtin-${k}-${(payload.new as Message).id}`, kind: k, title: BUILTIN_TITLE[k], data: {}, pinned: false, at: Date.now() })),
+          ]);
+          if (kinds.length) logActivity(supabase, "card", `画面のカード: ${kinds.map((k) => BUILTIN_TITLE[k]).join("・")}`);
+        }
         setMessages((prev) => {
           if (payload.eventType === "DELETE") return prev.filter((m) => m.id !== (payload.old as Message).id);
           const row = payload.new as Message;
@@ -250,6 +262,21 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       .subscribe();
     return () => {
       cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
+  // 画面のカード: DIMY が show_card で出したもの（表 cards）を受け取る
+  useEffect(() => {
+    const channel = supabase
+      .channel("hud-cards")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "cards" }, (payload) => {
+        const row = payload.new as { id: string; kind: CardKind; title: string; data: CardData };
+        setCards((prev) => (prev.some((c) => c.id === row.id) ? prev : [...prev, { id: row.id, kind: row.kind, title: row.title, data: row.data ?? {}, pinned: false, at: Date.now() }]));
+        logActivity(supabase, "card", `画面のカード（DIMY）: ${row.kind} ${row.title}`);
+      })
+      .subscribe();
+    return () => {
       supabase.removeChannel(channel);
     };
   }, [supabase]);
@@ -807,6 +834,21 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     <div className="dimy-grid relative h-dvh w-full overflow-hidden text-cyan-100">
       <DataField mode={mode} tone={tone} />
       <HudChrome now={now} mode={mode} online={online} messages={messages} todayCount={todayCount} pinCount={pins.pins.length} />
+
+      <Showcase
+        cards={cards}
+        onClose={(id) => setCards((prev) => prev.filter((c) => c.id !== id))}
+        onPin={(id) => setCards((prev) => prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)))}
+        onCloseAll={() => {
+          logActivity(supabase, "card", `カードをすべて閉じた（${cards.length} 枚）`);
+          setCards([]);
+        }}
+        onOpenLink={(url, title) => void openOutside(url, title, null)}
+        onOpenPage={(url, title) => pins.addWeb(url, undefined, title)}
+        weather={weather}
+        place={place}
+        session={session}
+      />
 
       {/* 中央：球体とリング */}
       <div className="absolute inset-0 grid place-items-center">

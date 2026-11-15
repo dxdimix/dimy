@@ -261,3 +261,9 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(34, 211, 238, 0.35) transparent;
 }
+
+/* 画面のカードが端から入ってくる動き */
+@keyframes dimy-card-right { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes dimy-card-left { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.dimy-card-in-right { animation: dimy-card-right 0.25s ease-out; }
+.dimy-card-in-left { animation: dimy-card-left 0.25s ease-out; }
