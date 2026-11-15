@@ -116,6 +116,10 @@ const claude = new ClaudeSession({
     if (google.length) log(`コネクタ: ${google.map((m) => `${m.name}（${m.status}）`).join("、")}`);
     const n = (ev.tools ?? []).filter((t) => CONNECTORS.some((c) => t.startsWith(connectorToolPrefix(c)))).length;
     log(`コネクタの道具: ${n} 個`);
+    // 料金の確かめ: apiKeySource が "none" なら、claude.ai のログイン（サブスクの枠）で動いている。
+    // "ANTHROPIC_API_KEY" などなら API キー（使った分だけ API の料金がかかる）で動いている
+    const src = ev.apiKeySource ?? "（不明）";
+    log(`Claude Code のログイン: ${src === "none" ? "claude.ai のアカウント（サブスクの枠）" : `API キー（${src}）。API の料金がかかります`}・モデル: ${ev.model ?? "（不明）"}`);
   },
   disallowedTools: "Read(**/.env*),Read(**/*.pem),Read(**/*.key),Bash,Edit,Write,NotebookEdit",
   mcpConfigFile: MCP_CONFIG_FILE,
