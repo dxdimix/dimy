@@ -21,7 +21,7 @@ import { startBookmarkSync } from "./lib/bookmarks.mjs";
 import { startHotkeyWatch } from "./lib/hotkey.mjs";
 import { runCommand, startPcStateSync } from "./lib/pc.mjs";
 import { ensureDesktopShortcuts } from "./lib/shortcuts.mjs";
-import { findClaudeBin, refreshWindowsPath } from "./lib/winpath.mjs";
+import { ensureClaudeInUserPath, findClaudeBin, refreshWindowsPath } from "./lib/winpath.mjs";
 
 // Windows: デスクトップのショートカットから起動したときも Claude Code が見つかるよう、PATH を最新にする
 refreshWindowsPath();
@@ -500,6 +500,13 @@ ensureDesktopShortcuts({ root: ROOT, log });
 
 // 最初の発言を待たずに Claude Code を起動しておく（1 回目の返事も速くするため）。
 log(`Claude Code の場所: ${CLAUDE_BIN}`);
+// コマンドプロンプトで `claude` だけで起動できるよう、Claude Code の場所を利用者の PATH に足す（入っていれば何もしない）
+{
+  const r = ensureClaudeInUserPath();
+  if (r === "added") log("Claude Code の場所（.local\\bin）を Windows の利用者の PATH に足しました。新しく開いたコマンドプロンプトで `claude` と打てば起動できます。");
+  else if (r === "already") log("Claude Code の場所は、Windows の利用者の PATH に入っています。");
+  else if (r !== "skipped") log(`Claude Code の場所を PATH に足せませんでした: ${r}`);
+}
 // 料金の安全確認: Anthropic の API キーが PC のどこかにないか（場所だけ記録する。中身は読まない）
 try {
   const envFiles = [path.join(ROOT, ".env.local"), path.join(ROOT, ".env")];

@@ -59,3 +59,49 @@ export function findClaudeBin(env = process.env) {
   }
   return "claude";
 }
+
+/** 利用者の PATH に dir が入っているか（大文字・小文字と、最後の \ の違いは見ない） */
+export function pathHas(pathValue, dir, expand = (s) => s) {
+  const norm = (p) => expand(p).replace(/[\\/]+$/, "").toLowerCase();
+  return String(pathValue).split(";").filter(Boolean).some((p) => norm(p) === norm(dir));
+}
+
+/**
+ * Claude Code の入っている場所（C:\Users\<名前>\.local\bin）を、Windows の「利用者の PATH」に足す（利用者が頼んだこと: 2026-11-15）。
+ * これで、新しく開いたコマンドプロンプトで `claude` だけで起動できる。
+ * - 入っていれば何もしない。今の PATH の中身は消さずに、いちばん後ろに足すだけ。
+ * - setx は 1024 文字で切れるので使わない。レジストリを %〇〇% のまま読み、同じ種類（REG_EXPAND_SZ）で書き戻す。
+ * - 書いたあと、Windows に「環境変数が変わった」と知らせる（新しく開くウィンドウに反映される）。
+ * @returns {"added" | "already" | "skipped" | string} string はエラーの内容
+ */
+export function ensureClaudeInUserPath() {
+  if (process.platform !== "win32") return "skipped";
+  const dir = path.join(os.homedir(), ".local", "bin");
+  if (!fs.existsSync(path.join(dir, "claude.exe"))) return "skipped";
+  const expand = (s) => s.replace(/%([^%]+)%/g, (_, v) => process.env[v] ?? `%${v}%`);
+  if (pathHas(regPath("HKCU\\Environment"), dir, expand)) return "already";
+  const ps = [
+    "$ErrorActionPreference = 'Stop'",
+    `$dir = '${dir.replace(/'/g, "''")}'`,
+    "$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)",
+    "$v = [string]$k.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)",
+    "$parts = @($v -split ';' | Where-Object { $_ -ne '' })",
+    "if ($parts | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\\') -ieq $dir }) { 'already'; exit }",
+    "$k.SetValue('Path', (($parts + $dir) -join ';'), [Microsoft.Win32.RegistryValueKind]::ExpandString)",
+    "$k.Close()",
+    // 変わったことを Windows に知らせる（ダミーの変数を作って消すと、知らせが届く）
+    "[Environment]::SetEnvironmentVariable('DIMY_PATH_NOTIFY', '1', 'User')",
+    "[Environment]::SetEnvironmentVariable('DIMY_PATH_NOTIFY', $null, 'User')",
+    "'added'",
+  ].join("\n");
+  try {
+    const out = execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", Buffer.from(ps, "utf16le").toString("base64")], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 20_000,
+    });
+    return out.includes("already") ? "already" : out.includes("added") ? "added" : `想定外の結果: ${out.trim().slice(0, 200)}`;
+  } catch (e) {
+    return e instanceof Error ? e.message.slice(0, 300) : String(e);
+  }
+}
