@@ -196,8 +196,13 @@ export function Chat({
     embedded,
   ]);
 
+  // 開いたときは、いちばん下（最新）を一瞬で出す（上からスクロールしていく動きにしない）。
+  // そのあと届いた発言・返事のときだけ、なめらかに下へ送る
+  const scrolledOnce = useRef(false);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!messages.length) return;
+    bottomRef.current?.scrollIntoView({ behavior: scrolledOnce.current ? "smooth" : "instant", block: "end" });
+    scrolledOnce.current = true;
   }, [messages]);
 
   async function onSubmit(e?: React.FormEvent) {
