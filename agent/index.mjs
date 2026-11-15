@@ -5,7 +5,7 @@
 //
 // 起動: npm run agent（.env.local の SUPABASE_URL / SUPABASE_SECRET_KEY を使う）
 
-import { chatgptUrl } from "./lib/chatgpt.mjs";
+import { chatgptUrl, fallbackCard } from "./lib/chatgpt.mjs";
 import { claudeCodeBillingPlaces, findApiKeyPlaces } from "./lib/apikey-check.mjs";
 import fs from "node:fs";
 import os from "node:os";
@@ -133,6 +133,7 @@ const claude = new ClaudeSession({
   // 使った道具を記録に残す（Google カレンダー・Chrome で開く・Web 検索など）
   onTool: (name) => {
     log(`道具を使いました: ${name}`);
+    if (currentTurn && /show_card/.test(name)) currentTurn.cardShown = true;
     // 調べもの（Web 検索）を始めたら、同じ質問を ChatGPT にも渡したカードを画面に出す（利用者の希望。1 回の返事で 1 回だけ）
     if (name === "WebSearch" && currentTurn && !currentTurn.chatgptSent) {
       currentTurn.chatgptSent = true;
@@ -308,7 +309,7 @@ async function handle(message) {
   if (claimError) throw claimError;
   if (!claimed) return;
 
-  currentTurn = { id: claimed.id, text: String(claimed.content), user: claimed.user_id, chatgptSent: false };
+  currentTurn = { id: claimed.id, text: String(claimed.content), user: claimed.user_id, chatgptSent: false, cardShown: false };
   log(`発言を受け取りました「${String(claimed.content).replace(/\s+/g, " ").slice(0, 300)}」。返事を作っています…`);
   const started = Date.now();
   const writer = createReplyWriter(claimed);
@@ -364,6 +365,14 @@ async function handle(message) {
 
     await writer.finish(reply);
     log(`返事「${reply.replace(/\s+/g, " ").slice(0, 300)}」`);
+    // カードを 1 枚も出さなかった返事は、要点のカードを出す（利用者の決まり: 調べものでなくても、いつもカードで見せる）
+    if (currentTurn?.id === claimed.id && !currentTurn.cardShown) {
+      const card = fallbackCard(claimed.content, reply);
+      if (card) {
+        const { error } = await supabase.from("cards").insert({ user_id: claimed.user_id, ...card });
+        log(error ? `要点のカードを出せませんでした: ${error.message}` : `ディミがカードを出さなかったので、要点のカードを出しました（${card.data.points.length} 項目）`);
+      }
+    }
     await supabase.from("messages").update({ status: "done" }).eq("id", claimed.id);
     const sec = (ms) => (ms / 1000).toFixed(1);
     log(`返事をしました（書き始め ${sec(firstAt - started)} 秒 / 完了 ${sec(Date.now() - started)} 秒）`);
