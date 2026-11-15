@@ -39,3 +39,23 @@ describe("地図", () => {
     expect(mapOpenUrl("a b")).toBe("https://www.google.com/maps/search/?api=1&query=a%20b");
   });
 });
+
+import { snapshotCards } from "../src/lib/cards";
+
+describe("会話の控え", () => {
+  it("呼び出した会話のカードとピンは残さない", () => {
+    const c = (id: string, kind: "list" | "talk", pinned: boolean) => ({ id, kind, title: id, data: {}, pinned, at: 0 });
+    expect(snapshotCards([c("a", "list", true), c("b", "talk", false)])).toEqual([c("a", "list", false)]);
+  });
+});
+
+import { splitColumns } from "../src/lib/cards";
+
+describe("左右の列", () => {
+  it("取り出したカードは離した側の上、ほかは右・左の互い違い", () => {
+    const c = (id: string, side?: "left" | "right") => ({ id, kind: "text" as const, title: id, data: {}, pinned: false, at: 0, side });
+    const r = splitColumns([c("a"), c("b"), c("c"), c("x", "left"), c("y", "left")]);
+    expect(r.right.map((x) => x.id)).toEqual(["a", "c"]);
+    expect(r.left.map((x) => x.id)).toEqual(["y", "x", "b"]);
+  });
+});

@@ -1,10 +1,14 @@
 // 画面のカード（返事の中身を目でも見せる）の形と、言葉から出すカードを決める決まり。
 
-export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map";
+export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
   places?: { name: string; query: string; note?: string }[];
+  /** talk: 履歴から呼び出した会話（あなたの発言と DIMY の返事） */
+  q?: string;
+  a?: string;
+  at?: string;
   image?: string;
   points?: string[];
   style?: "points" | "steps";
@@ -12,7 +16,26 @@ export type CardData = {
   note?: string;
   text?: string;
 };
-export type Card = { id: string; kind: CardKind; title: string; data: CardData; pinned: boolean; at: number };
+export type Card = {
+  id: string;
+  kind: CardKind;
+  title: string;
+  data: CardData;
+  pinned: boolean;
+  at: number;
+  /** 出す側を決めたカード（ドラッグで取り出したもの）。その側のいちばん上に出す */
+  side?: "left" | "right";
+};
+
+/** カードを左右の列に分ける。側の決まったカードはその列の上に、ほかは右・左の互い違いに並べる */
+export function splitColumns(cards: Card[]): { left: Card[]; right: Card[] } {
+  const left: Card[] = [];
+  const right: Card[] = [];
+  let n = 0;
+  for (const c of cards) if (!c.side) (n++ % 2 === 0 ? right : left).push(c);
+  const fixed = cards.filter((c) => c.side).reverse(); // 新しく取り出したものほど上
+  return { left: [...fixed.filter((c) => c.side === "left"), ...left], right: [...fixed.filter((c) => c.side === "right"), ...right] };
+}
 
 /**
  * 発言の言葉から、画面がすぐ（PC の DIMY に聞かずに）出すカードを決める。
@@ -84,4 +107,13 @@ export function mapEmbedUrl(query: string, zoom = 14): string {
 /** Google マップで開く URL */
 export function mapOpenUrl(query: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+/** カードを枠の外へドラッグして、そのリンク・場所だけを別のカードにするときの、ドラッグの中身の種類 */
+export const CARD_DRAG_TYPE = "application/x-dimy-card";
+export type CardDrag = { from: string; kind: CardKind; title: string; data: CardData };
+
+/** 会話の控えに残す形（ピンの有無と、呼び出した会話のカードは残さない） */
+export function snapshotCards(cards: Card[]): Card[] {
+  return cards.filter((c) => c.kind !== "talk").map((c) => ({ ...c, pinned: false, side: undefined }));
 }

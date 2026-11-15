@@ -32,12 +32,15 @@ export function Chat({
   session,
   embedded = false,
   onLocalCommand,
+  onRecall,
 }: {
   supabase: SupabaseClient;
   session: Session;
   embedded?: boolean;
   /** 「YouTube を開いて」など、画面だけで済ませる命令を先に受け取る（済ませたら true。PC の Claude には送らない） */
   onLocalCommand?: (text: string) => Promise<boolean>;
+  /** 発言を押したとき、そのときの会話とカードを画面に出し直す（全画面のパネル用） */
+  onRecall?: (userMessageId: string) => void;
 }) {
   // 設定（声の速さなど）をデータベースから読む（どの端末でも共通）
   useEffect(() => {
@@ -372,6 +375,11 @@ export function Chat({
               }
             >
               {m.content}
+              {onRecall && m.role === "user" && (
+                <button onClick={() => onRecall(m.id)} className="mt-1 block text-xs text-cyan-200 underline-offset-2 hover:underline" title="そのときの会話とカードを、画面に出し直します">
+                  ▸ カードをもう一度出す
+                </button>
+              )}
               {m.role === "assistant" && m.status === "processing" && (
                 <span className="ml-0.5 inline-block animate-pulse text-cyan-400">
                   ▍

@@ -7,7 +7,7 @@
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
 import { Showcase } from "./Showcase";
-import { BUILTIN_TITLE, builtinCardsFor, type Card, type CardData, type CardKind } from "@/lib/cards";
+import { BUILTIN_TITLE, builtinCardsFor, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -160,6 +160,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const now = useNow();
   const [messages, setMessages] = useState<Message[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  // いまの会話（あなたの発言）と、その間に出たカード。次の会話に移ってもカードを呼び出せるよう、表 card_snapshots に控える
+  const turnRef = useRef<{ id: string; cards: Map<string, Card> } | null>(null);
   const [panel, setPanel] = useState<"none" | "chat" | "settings" | "bookmarks" | "pin" | "palette" | "weather" | "calendar" | "admin">("none");
   const panelRef = useRef(panel);
   // Chrome のブックマーク（PC のディミが写したもの）。表がまだないときは空のまま
@@ -243,6 +245,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         // 新しい発言: 残していないカードを片付け、言葉から分かるカード（天気・日付・予定）をすぐ出す
         if (payload.eventType === "INSERT" && (payload.new as Message).role === "user") {
           const kinds = builtinCardsFor((payload.new as Message).content);
+          turnRef.current = { id: (payload.new as Message).id, cards: new Map() };
           setCards((prev) => [
             ...prev.filter((c) => c.pinned),
             ...kinds.map((k) => ({ id: `builtin-${k}-${(payload.new as Message).id}`, kind: k, title: BUILTIN_TITLE[k], data: {}, pinned: false, at: Date.now() })),
@@ -280,6 +283,59 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       supabase.removeChannel(channel);
     };
   }, [supabase]);
+
+  // 会話の控え: その会話の間に出たカードを、閉じたものも含めて残す（1 秒まとめて書く）
+  useEffect(() => {
+    const turn = turnRef.current;
+    if (!turn || !cards.length) return;
+    let added = false;
+    for (const c of snapshotCards(cards)) {
+      if (!turn.cards.has(c.id)) added = true;
+      turn.cards.set(c.id, c);
+    }
+    if (!added) return;
+    const t = setTimeout(() => {
+      supabase
+        .from("card_snapshots")
+        .upsert({ message_id: turn.id, cards: [...turn.cards.values()], updated_at: new Date().toISOString() })
+        .then(({ error }) => {
+          if (error) logActivity(supabase, "error", `カードの控えを残せませんでした: ${error.message}`);
+        });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [cards, supabase]);
+
+  /** 履歴を押したとき: そのときの会話とカードを出し直す（残しているカードはそのまま） */
+  const recall = useCallback(
+    async (userMessageId: string) => {
+      const [{ data: rows }, { data: snap }] = await Promise.all([
+        supabase.from("messages").select("*").or(`id.eq.${userMessageId},reply_to.eq.${userMessageId}`).order("created_at"),
+        supabase.from("card_snapshots").select("cards").eq("message_id", userMessageId).maybeSingle(),
+      ]);
+      const list = (rows ?? []) as Message[];
+      const q = list.find((m) => m.id === userMessageId);
+      if (!q) return;
+      const a = list.filter((m) => m.role === "assistant").map((m) => m.content).join("\n\n");
+      const old = ((snap?.cards ?? []) as Card[]).map((c) => ({ ...c, id: `r-${userMessageId}-${c.id}`, pinned: false, at: Date.now() }));
+      turnRef.current = null; // 呼び出したカードで、いまの会話の控えを書き換えない
+      setCards((prev) => [
+        ...prev.filter((c) => c.pinned && c.kind !== "talk"),
+        { id: `talk-${userMessageId}`, kind: "talk", title: "そのときの会話", data: { q: q.content, a, at: q.created_at }, pinned: false, at: Date.now() },
+        ...old.filter((c) => !prev.some((p) => p.pinned && p.id === c.id)),
+      ]);
+      logActivity(supabase, "card", `履歴から呼び出した: 「${q.content.slice(0, 40)}」（カード ${old.length} 枚）`);
+    },
+    [supabase],
+  );
+
+  /** カードの中のリンク・場所を外へドラッグしたとき: それだけのカードを作って残す */
+  const extractCard = useCallback(
+    (c: Omit<CardDrag, "from">, side: "left" | "right") => {
+      setCards((prev) => [...prev, { ...c, id: `x-${Date.now()}`, pinned: true, at: Date.now(), side }]);
+      logActivity(supabase, "card", `カードから取り出して残した: ${c.title}`);
+    },
+    [supabase],
+  );
 
   // ブックマークを読む（開いたときと、一覧を開いたとき）
   const loadBookmarks = useCallback(() => {
@@ -833,7 +889,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   return (
     <div className="dimy-grid relative h-dvh w-full overflow-hidden text-cyan-100">
       <DataField mode={mode} tone={tone} />
-      <HudChrome now={now} mode={mode} online={online} messages={messages} todayCount={todayCount} pinCount={pins.pins.length} />
+      <HudChrome now={now} mode={mode} online={online} messages={messages} todayCount={todayCount} pinCount={pins.pins.length} onPick={(m) => void recall(m.role === "user" ? m.id : (m.reply_to ?? m.id))} />
 
       <Showcase
         cards={cards}
@@ -845,13 +901,14 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         }}
         onOpenLink={(url, title) => void openOutside(url, title, null)}
         onOpenPage={(url, title) => pins.addWeb(url, undefined, title)}
+        onExtract={extractCard}
         weather={weather}
         place={place}
         session={session}
       />
 
       {/* 中央：球体とリング */}
-      <div className="absolute inset-0 grid place-items-center">
+      <div className="pointer-events-none absolute inset-0 grid place-items-center">
         <div className="aspect-square w-[min(62vmin,640px)]">
           <Ring mode={mode} tone={tone} waiting={wakeOn && isLeader && wake.state === "standby"} />
         </div>
@@ -1173,6 +1230,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
               supabase={supabase}
               session={session}
               embedded
+              onRecall={(id) => void recall(id)}
               onLocalCommand={async (t) => {
                 logActivity(supabase, "voice", `（文字）${t}`);
                 return handleLocal(t);

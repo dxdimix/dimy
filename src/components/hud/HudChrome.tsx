@@ -123,6 +123,8 @@ export function HudChrome(o: {
   messages: Message[];
   todayCount: number | null;
   pinCount: number;
+  /** LOG の行を押したとき（そのときの会話とカードを出し直す） */
+  onPick?: (m: Message) => void;
 }) {
   // 直近の返事までの時間（発言から返事の行ができるまで）
   let latency: number | null = null;
@@ -165,17 +167,23 @@ export function HudChrome(o: {
       </div>
 
       {/* 右下寄り: 最近の出来事 */}
-      <div className="absolute bottom-24 right-6 hidden w-56 space-y-1 font-mono text-[10px] lg:block">
+      <div className="pointer-events-auto absolute bottom-24 right-6 hidden w-56 space-y-1 font-mono text-[10px] lg:block">
         <div className="mb-1 flex items-center gap-2 text-cyan-300/70">
           <span className="h-px flex-1 bg-cyan-400/30" />
           <span className="tracking-[0.35em]">LOG</span>
         </div>
         {log.map((m, i) => (
-          <div key={m.id} className="flex gap-2 truncate" style={{ opacity: 1 - i * 0.17 }}>
+          <button
+            key={m.id}
+            onClick={() => o.onPick?.(m)}
+            title="押すと、そのときの会話とカードを出し直します"
+            className="flex w-full gap-2 truncate rounded text-left hover:bg-cyan-400/10 hover:!opacity-100"
+            style={{ opacity: 1 - i * 0.17 }}
+          >
             <span className="text-cyan-400/60">{fmt(m.created_at)}</span>
             <span className={m.role === "user" ? "text-cyan-200/80" : "text-cyan-100/60"}>{m.role === "user" ? "▸" : "◂"}</span>
             <span className="truncate text-cyan-100/70">{m.content.replace(/\s+/g, " ").slice(0, 22)}</span>
-          </div>
+          </button>
         ))}
       </div>
 

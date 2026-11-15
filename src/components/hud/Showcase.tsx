@@ -8,10 +8,10 @@
 // - 各カードに「残す」（次の質問でも消えない）と「閉じる」。上に「すべて閉じる」
 // - スマホなど幅の狭い画面では、上に 1 列で出す
 
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type DragEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
-import type { Card } from "@/lib/cards";
-import { emphasize, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
+import type { Card, CardDrag } from "@/lib/cards";
+import { CARD_DRAG_TYPE, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
 import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 
@@ -26,10 +26,25 @@ type Props = {
   onOpenLink: (url: string, title: string) => void;
   /** ページを固定ウィンドウで開く */
   onOpenPage: (url: string, title: string) => void;
+  /** カードの中のリンク・場所を枠の外へドラッグして離したとき、それだけを別のカードにする */
+  onExtract: (c: Omit<CardDrag, "from">, side: "left" | "right") => void;
   weather: Weather | null;
   place: Place | null;
   session: Session;
 };
+
+/** ドラッグして枠の外へ出せるようにする（リンク・場所）。ほかの場所（固定ウィンドウなど）には渡さない */
+function dragOut(payload: CardDrag) {
+  return {
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.stopPropagation();
+      e.dataTransfer.clearData();
+      e.dataTransfer.setData(CARD_DRAG_TYPE, JSON.stringify(payload));
+      e.dataTransfer.effectAllowed = "copy";
+    },
+  };
+}
 
 const NARROW = "(max-width: 767px)";
 function useNarrow() {
@@ -51,6 +66,34 @@ const COLUMN_BASE: CSSProperties = { top: "6.5rem", maxHeight: "calc(100dvh - 6.
 
 export function Showcase(p: Props) {
   const narrow = useNarrow();
+  const { onExtract } = p;
+  // カードの中のリンクを、元のカードの外で離したら、それだけのカードを作る（残す）
+  useEffect(() => {
+    const isOurs = (e: globalThis.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes(CARD_DRAG_TYPE);
+    const over = (e: globalThis.DragEvent) => {
+      if (!isOurs(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    };
+    const drop = (e: globalThis.DragEvent) => {
+      if (!isOurs(e)) return;
+      e.preventDefault();
+      try {
+        const d = JSON.parse(e.dataTransfer!.getData(CARD_DRAG_TYPE)) as CardDrag;
+        const under = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-card-id]");
+        if (under?.getAttribute("data-card-id") === d.from) return; // 元のカードの中で離した
+        onExtract({ kind: d.kind, title: d.title, data: d.data }, e.clientX < window.innerWidth / 2 ? "left" : "right");
+      } catch {
+        /* 読めないものは無視 */
+      }
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  }, [onExtract]);
   if (!p.cards.length) return null;
   const column = (list: Card[], side: "left" | "right" | "top") => {
     const style: CSSProperties =
@@ -73,14 +116,8 @@ export function Showcase(p: Props) {
         column(p.cards, "top")
       ) : (
         <>
-          {column(
-            p.cards.filter((_, i) => i % 2 === 0),
-            "right",
-          )}
-          {column(
-            p.cards.filter((_, i) => i % 2 === 1),
-            "left",
-          )}
+          {column(splitColumns(p.cards).right, "right")}
+          {column(splitColumns(p.cards).left, "left")}
         </>
       )}
       <button
@@ -124,7 +161,7 @@ function Photo({ src, alt, className }: { src?: string; alt: string; className: 
       </div>
     );
   // eslint-disable-next-line @next/next/no-img-element -- 外のサイトの画像をそのまま出す
-  return <img src={src} alt={alt} referrerPolicy="no-referrer" loading="eager" onError={() => setBad(true)} className={className + " object-cover"} />;
+  return <img src={src} alt={alt} draggable={false} referrerPolicy="no-referrer" loading="eager" onError={() => setBad(true)} className={className + " object-cover"} />;
 }
 const host = (u: string) => {
   try {
@@ -135,9 +172,10 @@ const host = (u: string) => {
 };
 
 function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather, place, session }: Props & { card: Card; side: "left" | "right" }) {
-  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP" }[card.kind];
+  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY" }[card.kind];
   return (
     <div
+      data-card-id={card.id}
       className={
         "pointer-events-auto shrink-0 rounded-xl border bg-slate-950/88 p-4 text-lg text-slate-100 shadow-[0_0_32px_rgba(34,211,238,0.18)] backdrop-blur " +
         (card.pinned ? "border-cyan-300/80" : "border-cyan-400/35") +
@@ -157,6 +195,21 @@ function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather,
       {card.kind === "weather" && <WeatherCard weather={weather} place={place} />}
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}
+      {card.kind === "talk" && (
+        <div className="space-y-3">
+          {card.data.at && <div className="font-mono text-sm text-cyan-300/80">{new Date(card.data.at).toLocaleString("ja-JP", { timeZone: TZ, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>}
+          <div className="rounded-lg bg-cyan-700/40 px-3 py-2 leading-snug">
+            <span className="mr-2 text-sm text-cyan-200">あなた</span>
+            {card.data.q}
+          </div>
+          {card.data.a && (
+            <div className="max-h-[40vh] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-800/60 px-3 py-2 leading-relaxed">
+              <span className="mr-2 text-sm text-cyan-300">DIMY</span>
+              <Emph text={card.data.a} />
+            </div>
+          )}
+        </div>
+      )}
       {card.kind === "list" && <ListCard card={card} onOpenLink={onOpenLink} />}
       {card.kind === "map" && <MapCard card={card} onOpenLink={onOpenLink} />}
       {card.kind === "stats" && (
@@ -231,11 +284,13 @@ function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather,
 function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, title: string) => void }) {
   const items = card.data.items ?? [];
   const open = (it: (typeof items)[number]) => it.url && onOpenLink(it.url, it.title);
+  const drag = (it: (typeof items)[number]) =>
+    it.url ? dragOut({ from: card.id, kind: "page", title: it.title, data: { url: it.url, image: it.image, note: it.note } }) : {};
   if (!items.some((it) => it.image))
     return (
       <ol className="space-y-2.5">
         {items.map((it, i) => (
-          <li key={i} className="flex gap-3">
+          <li key={i} className="flex gap-3" {...drag(it)} title={it.url ? "押すと開きます。カードの外へドラッグすると、これだけのカードにして残します" : undefined}>
             <span className="w-6 shrink-0 text-right font-mono font-bold text-cyan-300">{i + 1}</span>
             <div className="min-w-0">
               <button onClick={() => open(it)} disabled={!it.url} className="text-left font-semibold leading-snug text-cyan-50 enabled:hover:underline">
@@ -254,7 +309,7 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
   const [first, ...rest] = items;
   return (
     <div className="space-y-3">
-      <button onClick={() => open(first)} className="group block w-full text-left">
+      <button onClick={() => open(first)} {...drag(first)} title="押すと開きます。カードの外へドラッグすると、これだけのカードにして残します" className="group block w-full text-left">
         <div className="relative overflow-hidden rounded-lg">
           <Photo src={first.image} alt={first.url ?? first.title} className="aspect-video w-full" />
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-3 pt-10">
@@ -272,7 +327,7 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
       {rest.length > 0 && (
         <div className="grid grid-cols-2 gap-3">
           {rest.map((it, i) => (
-            <button key={i} onClick={() => open(it)} className="group text-left">
+            <button key={i} onClick={() => open(it)} {...drag(it)} title="押すと開きます。カードの外へドラッグすると、これだけのカードにして残します" className="group text-left">
               <Photo src={it.image} alt={it.url ?? it.title} className="aspect-video w-full rounded-md" />
               <div className="mt-1 line-clamp-2 text-base font-semibold leading-snug text-cyan-50 group-hover:underline">
                 <Emph text={it.title} />
@@ -297,7 +352,7 @@ function MapCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, t
         <iframe key={p.query} src={mapEmbedUrl(p.query)} title={p.name} className="h-full w-full" loading="eager" referrerPolicy="no-referrer-when-downgrade" />
       </div>
       <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 cursor-grab" {...dragOut({ from: card.id, kind: "map", title: p.name, data: { places: [p] } })} title="カードの外へドラッグすると、この場所だけの地図のカードにして残します">
           <div className="text-xl font-bold leading-snug text-white">
             {places.length > 1 && <span className="mr-2 font-mono text-cyan-300">{sel + 1}</span>}
             {p.name}
@@ -319,6 +374,7 @@ function MapCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, t
             <button
               key={i}
               onClick={() => setSel(i)}
+              {...dragOut({ from: card.id, kind: "map", title: x.name, data: { places: [x] } })}
               className={
                 "flex max-w-full items-center gap-2 rounded-full border px-3 py-1 text-base " +
                 (i === sel ? "border-cyan-300 bg-cyan-400/25 font-semibold text-white" : "border-cyan-400/30 text-cyan-100 hover:bg-cyan-400/10")
