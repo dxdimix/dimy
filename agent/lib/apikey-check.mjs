@@ -57,8 +57,10 @@ export function findApiKeyPlaces(o = {}) {
     if (j.apiKeyHelper) places.push(`Claude Code の設定 ${file} の apiKeyHelper`);
   }
   // Claude Code に API キーでログインしたときの控え
+  // （claude.ai のサブスクでもログインしていれば、その控えは使われない。/status の表示は「/login managed key · not in use」）
   const state = readJson(path.join(home, ".claude.json"));
-  if (state?.primaryApiKey) places.push(`Claude Code のログイン情報 ${path.join(home, ".claude.json")}（API キーでログインした記録）`);
+  if (state?.primaryApiKey && !state?.oauthAccount)
+    places.push(`Claude Code のログイン情報 ${path.join(home, ".claude.json")}（API キーでログインしていて、サブスクのログインがない）`);
   // DIMY のフォルダなどの .env.local
   for (const file of o.extraEnvFiles ?? []) {
     try {

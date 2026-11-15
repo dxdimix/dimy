@@ -31,11 +31,13 @@ describe("API キーの確認", () => {
 import { claudeCodeBillingPlaces } from "../agent/lib/apikey-check.mjs";
 
 describe("DIMY の Claude Code の料金の確認", () => {
-  it("API キーでログインした記録があれば止める対象。環境変数は見ない（DIMY が外すため）", () => {
+  it("API キーだけでログインしているときに止める。環境変数は見ない（DIMY が外すため）", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "dimy-"));
-    fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ primaryApiKey: "sk-ant-x", oauthAccount: {} }));
+    // API キーだけでログイン → 止める
+    fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ primaryApiKey: "sk-ant-x" }));
     expect(claudeCodeBillingPlaces({ home })).toHaveLength(1);
-    fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ oauthAccount: {} }));
+    // サブスクでもログインしている → 控えは使われない（/status: not in use）
+    fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ primaryApiKey: "sk-ant-x", oauthAccount: { emailAddress: "a" } }));
     expect(claudeCodeBillingPlaces({ home })).toEqual([]);
   });
 });

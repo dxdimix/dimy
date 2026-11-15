@@ -117,10 +117,11 @@ const claude = new ClaudeSession({
     if (google.length) log(`コネクタ: ${google.map((m) => `${m.name}（${m.status}）`).join("、")}`);
     const n = (ev.tools ?? []).filter((t) => CONNECTORS.some((c) => t.startsWith(connectorToolPrefix(c)))).length;
     log(`コネクタの道具: ${n} 個`);
-    // 料金の確かめ: apiKeySource が "none" なら、claude.ai のログイン（サブスクの枠）で動いている。
-    // "ANTHROPIC_API_KEY" などなら API キー（使った分だけ API の料金がかかる）で動いている
+    // 料金の確かめ: apiKeySource は「API キーがどこにあるか」を表す。"/login managed key" は、以前のログインの控えが残っているだけで、
+    // サブスク（Claude Max など）でもログインしていれば使われない（2026-11-15 に /status で「not in use」を確認）。
+    // 実際に使っているのは /status の Login method で分かる。料金のかかる設定は、返事の前の claudeCodeBillingPlaces で止める
     const src = ev.apiKeySource ?? "（不明）";
-    log(`Claude Code のログイン: ${src === "none" ? "claude.ai のアカウント（サブスクの枠）" : `API キー（${src}）。API の料金がかかります`}・モデル: ${ev.model ?? "（不明）"}`);
+    log(`Claude Code の API キーの置き場所: ${src}（"none" か、サブスクでログイン済みなら料金はかからない）・モデル: ${ev.model ?? "（不明）"}`);
   },
   disallowedTools: "Read(**/.env*),Read(**/*.pem),Read(**/*.key),Bash,Edit,Write,NotebookEdit",
   mcpConfigFile: MCP_CONFIG_FILE,
@@ -510,7 +511,7 @@ try {
   const places = findApiKeyPlaces({ extraEnvFiles: envFiles });
   log(
     places.length
-      ? `API キーの確認: 次の場所に Anthropic の API キーの設定があります（DIMY は使わないように外しています）: ${places.join(" / ")}`
+      ? `API キーの確認: 次の場所に Anthropic の API キーの設定があります（DIMY が Claude Code に渡す環境変数からは外しています）: ${places.join(" / ")}`
       : "API キーの確認: Anthropic の API キーの設定は見つかりませんでした（サブスクの枠だけで動きます）",
   );
 } catch (e) {
