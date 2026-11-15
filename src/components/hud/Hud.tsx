@@ -414,6 +414,13 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const extVersion = useDimyExtension();
   useEffect(() => {
     logActivity(supabase, "ui", extVersion ? `DIMY の拡張機能: あり（${extVersion}）` : "DIMY の拡張機能: なし");
+    // ChatGPT のログインの状態（拡張機能が <html data-dimy-chatgpt> に書く。Cookie の中身は含まない）
+    if (!extVersion) return;
+    const t = setTimeout(() => {
+      const info = document.documentElement.getAttribute("data-dimy-chatgpt");
+      if (info) logActivity(supabase, "ui", `ChatGPT の準備（拡張機能）: ${info}`);
+    }, 3000);
+    return () => clearTimeout(t);
   }, [extVersion, supabase]);
   /** ページをディミの画面の中で開く（Web のカード。正面に大きく・ピン留め） */
   function openWebCard(url: string, title: string) {

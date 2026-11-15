@@ -29,6 +29,7 @@
     void chrome.runtime.lastError;
     if (res?.pc) document.documentElement?.setAttribute("data-dimy-pc", "1");
     else document.documentElement?.removeAttribute("data-dimy-pc");
+    if (res?.chatgpt) document.documentElement?.setAttribute("data-dimy-chatgpt", String(res.chatgpt));
     window.postMessage({ dimyExtReady: version }, location.origin);
   });
 

@@ -44,9 +44,8 @@ async function isDimyPc() {
 // 画面の写真: 頼んできたディミのタブがあるウィンドウの、見えている部分を撮る
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg?.type === "hello" && sender.tab?.id !== undefined && isDimy(sender.tab.url)) {
-    relaxChatgptCookies();
-    Promise.all([allowFramesIn(sender.tab.id).catch(() => {}), isDimyPc()])
-      .then(([, pc]) => reply({ ok: true, pc }))
+    Promise.all([allowFramesIn(sender.tab.id).catch(() => {}), isDimyPc(), relaxChatgptCookies().catch((e) => `失敗: ${e}`)])
+      .then(([, pc, chatgpt]) => reply({ ok: true, pc, chatgpt }))
       .catch((e) => reply({ ok: false, error: String(e?.message || e) }));
     return true;
   }
@@ -116,9 +115,34 @@ async function relaxCookie(c) {
     /* 書き換えられないものは飛ばす */
   }
 }
+// Chrome がサードパーティ Cookie を止めていると、SameSite=None にしても枠の中へは送られない。
+// ディミの画面（*.dxdimix.com）の中の ChatGPT にだけ、Cookie を使うことを許す（Chrome の設定の「サードパーティ Cookie の使用を許可するサイト」と同じ）
+async function allowChatgptInDimy() {
+  const out = [];
+  const tries = [
+    { primaryPattern: "https://*.chatgpt.com/*", secondaryPattern: "https://*.dxdimix.com/*", setting: "allow", scope: "regular" },
+    { primaryPattern: "https://*.chatgpt.com/*", setting: "allow", scope: "regular" },
+  ];
+  for (const t of tries) {
+    try {
+      await chrome.contentSettings.cookies.set(t);
+      out.push(t.secondaryPattern ? "許可(ディミの中)" : "許可(chatgpt.com)");
+      break;
+    } catch (e) {
+      out.push(`失敗: ${String(e?.message || e).slice(0, 80)}`);
+    }
+  }
+  return out.join(" / ");
+}
 async function relaxChatgptCookies() {
+  const allow = await allowChatgptInDimy().catch((e) => `失敗: ${e}`);
   const all = await chrome.cookies.getAll({ domain: "chatgpt.com" }).catch(() => []);
   for (const c of all) await relaxCookie(c);
+  // 確かめるための数（Cookie の中身は見ない。名前に session-token があるか＝ログインしているかだけ）
+  const now = await chrome.cookies.getAll({ domain: "chatgpt.com" }).catch(() => []);
+  const none = now.filter((c) => c.sameSite === "no_restriction").length;
+  const login = now.some((c) => /session-token/.test(c.name)) ? "あり" : "なし";
+  return `Cookie ${now.length} 件（SameSite=None ${none} 件）・ログインの Cookie ${login}・サードパーティ Cookie ${allow}`;
 }
 chrome.cookies.onChanged.addListener(({ removed, cookie }) => {
   if (!removed) relaxCookie(cookie);
