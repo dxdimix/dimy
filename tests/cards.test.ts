@@ -86,3 +86,16 @@ describe("Web ページのカード", () => {
     expect(c.float).toEqual({ x: 410, y: 96, w: 1100, h: 694 });
   });
 });
+
+import { googleImagesUrl, mapDirUrl } from "../src/lib/cards";
+
+describe("道順と写真のリンク", () => {
+  it("出発地があれば道順の地図", () => {
+    expect(mapEmbedUrl("鷲羽山ハイランド", 14, "岡山県総社市")).toBe(
+      "https://maps.google.com/maps?saddr=%E5%B2%A1%E5%B1%B1%E7%9C%8C%E7%B7%8F%E7%A4%BE%E5%B8%82&daddr=%E9%B7%B2%E7%BE%BD%E5%B1%B1%E3%83%8F%E3%82%A4%E3%83%A9%E3%83%B3%E3%83%89&hl=ja&output=embed",
+    );
+    expect(mapDirUrl("a b")).toBe("https://www.google.com/maps/dir/?api=1&destination=a%20b&travelmode=driving");
+    expect(mapDirUrl("a", "b")).toContain("&origin=b");
+    expect(googleImagesUrl("瀬戸大橋")).toBe("https://www.google.com/search?q=%E7%80%AC%E6%88%B8%E5%A4%A7%E6%A9%8B&udm=2&hl=ja");
+  });
+});

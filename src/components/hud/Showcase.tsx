@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
-import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed, youtubeId } from "@/lib/cards";
+import { CARD_DRAG_TYPE, clampFloat, emphasize, googleImagesUrl, splitColumns, mapDirUrl, mapEmbedUrl, mapOpenUrl, youtubeEmbed, youtubeId } from "@/lib/cards";
 import { fetchForecast, fetchJma, findPlace, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 import { getPref } from "@/lib/prefs";
@@ -313,7 +313,7 @@ function CompactBody({ card, open, weather, session, all }: { card: Card; open: 
       return <div className="divide-y divide-cyan-400/10">{cut(d.items)?.map((it, i) => <Row key={i} onClick={() => it.url && open(it.url, it.title)} img={it.image} title={it.title} note={it.note} />)}</div>;
     case "map":
       // 地図はアプリで開く（Google マップのリンク。iPhone ではアプリが入っていればアプリ、なければ Safari）
-      return <div className="divide-y divide-cyan-400/10">{cut(d.places)?.map((pl, i) => <Row key={i} onClick={() => open(mapOpenUrl(pl.query), pl.name)} icon={pinIcon} title={pl.name} note={pl.note ?? "地図のアプリで開く"} />)}</div>;
+      return <div className="divide-y divide-cyan-400/10">{cut(d.places)?.map((pl, i) => <Row key={i} onClick={() => open(pl.from ? mapDirUrl(pl.query) : mapOpenUrl(pl.query), pl.name)} icon={pinIcon} title={pl.name} note={pl.note ?? (pl.from ? "地図のアプリで、現在地からの道順を開く" : "地図のアプリで開く")} />)}</div>;
     case "video": {
       const id = d.url ? youtubeId(d.url) : null;
       return d.url ? <Row onClick={() => open(d.url!, card.title)} img={id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : undefined} title={card.title} note="動画を開く" /> : null;
@@ -324,7 +324,19 @@ function CompactBody({ card, open, weather, session, all }: { card: Card; open: 
     case "web":
       return d.url ? <Row onClick={() => open(d.url!, card.title)} img={d.image} title={card.title} note={d.note ?? host(d.url)} /> : null;
     case "image":
-      return d.url ? <Row onClick={() => open(d.url!, card.title)} img={d.url} title={card.title} note="画像を開く" /> : null;
+      return d.images?.length ? (
+        <div className="grid grid-cols-2 gap-1.5">
+          {d.images.map((im, i) => (
+            <button key={i} onClick={() => open(im.page || im.url, im.title)}>
+              <Photo src={im.url} alt={im.title} className="aspect-[4/3] w-full rounded" />
+            </button>
+          ))}
+        </div>
+      ) : d.url ? (
+        <Row onClick={() => open(d.url!, card.title)} img={d.url} title={card.title} note="画像を開く" />
+      ) : d.query ? (
+        <Row onClick={() => open(googleImagesUrl(d.query!), card.title)} title={d.query} note="Google 画像で見る" />
+      ) : null;
     case "stats":
       return (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -659,8 +671,8 @@ function CardView({
       {card.kind === "chat" ? (
         <div className="-mx-4 -mb-4 min-h-0 flex-1 overflow-hidden text-base">{renderChat()}</div>
       ) : card.kind === "web" ? (
-        <div className="-mx-4 -mb-4 min-h-0 flex-1 overflow-hidden rounded-b-xl">
-          <WebFrame url={card.data.url ?? ""} title={card.title} />
+        <div className={"-mx-4 -mb-4 overflow-hidden rounded-b-xl " + (floating ? "min-h-0 flex-1" : "aspect-[4/3]")}>
+          <WebFrame url={card.data.url ?? ""} title={card.title} image={card.data.image} onOpen={() => onOpenChrome(card.data.url ?? "", card.title)} />
         </div>
       ) : (
       <div className={floating ? "-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin]" : ""}>
@@ -772,7 +784,7 @@ export function CardBody({
           <Emph text={card.data.text ?? ""} />
         </p>
       )}
-      {card.kind === "image" && card.data.url && <Photo src={card.data.url} alt={card.title} className="max-h-[60vh] w-full rounded-lg !object-contain" />}
+      {card.kind === "image" && <ImageCard card={card} onOpenChrome={onOpenChrome} />}
       {card.kind === "video" && card.data.url && <VideoCard url={card.data.url} title={card.title} onOpenLink={onOpenLink} />}
       {card.kind === "page" && card.data.url && (
         <div className="space-y-3">
@@ -864,16 +876,59 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
   );
 }
 
+/** 写真（言葉で探した写真は、2 列で並べる。出典は Wikimedia Commons） */
+function ImageCard({ card, onOpenChrome }: { card: Card; onOpenChrome?: (url: string, title: string) => void }) {
+  const d = card.data;
+  // デスクトップ（拡張機能あり）では、Google 画像検索の結果をそのまま出す（写真を探す待ち時間がなく、ひと目でイメージが伝わる。利用者の案）
+  if (d.query && hasDimyExtension())
+    return (
+      <div className="-mx-4 -mb-4 aspect-[4/3] overflow-hidden rounded-b-xl">
+        <WebFrame url={googleImagesUrl(d.query)} title={card.title} />
+      </div>
+    );
+  const google = d.query && onOpenChrome && (
+    <button onClick={() => onOpenChrome(googleImagesUrl(d.query!), card.title)} className="flex items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 text-base hover:bg-slate-800">
+      <ExternalIcon className="h-4 w-4" />
+      Google 画像で見る
+    </button>
+  );
+  if (d.images?.length)
+    return (
+      <div className="space-y-1.5">
+        <div className={"grid gap-2 " + (d.images.length > 1 ? "grid-cols-2" : "")}>
+          {d.images.map((im, i) => (
+            <a key={i} href={im.page || im.url} target="_blank" rel="noopener" title={im.title}>
+              <Photo src={im.url} alt={im.title} className={(d.images!.length > 1 ? "aspect-[4/3]" : "max-h-[50vh]") + " w-full rounded-lg"} />
+            </a>
+          ))}
+        </div>
+        {d.note && <p className="text-base text-slate-300">{d.note}</p>}
+        <div className="flex items-center justify-between gap-2">
+          {google || <span />}
+          <p className="text-xs text-slate-500">写真: Wikimedia Commons</p>
+        </div>
+      </div>
+    );
+  if (d.url) return <Photo src={d.url} alt={card.title} className="max-h-[60vh] w-full rounded-lg !object-contain" />;
+  return (
+    <div className="space-y-2">
+      <p className="text-base text-slate-400">写真を探しています…</p>
+      {google}
+    </div>
+  );
+}
+
 /** ディミの画面の中で開いた Web ページ（拡張機能が「中に表示しないで」の印を外す） */
-function WebFrame({ url, title }: { url: string; title: string }) {
+function WebFrame({ url, title, image, onOpen }: { url: string; title: string; image?: string; onOpen?: () => void }) {
+  // 拡張機能がない端末（ノート・スマホ）は、ページの代わりに見出しの写真と「ページを開く」を出す
   if (!hasDimyExtension())
     return (
-      <div className="grid h-full place-items-center p-6 text-center text-base text-slate-300">
-        <p>
-          この端末の Chrome には DIMY の拡張機能が入っていないため、ページを中に表示できないことがあります。
-          <br />
-          右上のボタンで Chrome で開けます。
-        </p>
+      <div className="flex h-full flex-col">
+        <Photo src={image} alt={url} className="min-h-0 w-full flex-1" />
+        <button onClick={onOpen} className="flex items-center justify-center gap-2 border-t border-cyan-400/20 py-3 text-base text-cyan-100 hover:bg-cyan-400/10">
+          <ExternalIcon className="h-4 w-4" />
+          ページを開く（{host(url)}）
+        </button>
       </div>
     );
   return (
@@ -896,7 +951,7 @@ function MapCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, t
   return (
     <div className="space-y-3">
       <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-slate-800">
-        <iframe key={p.query} src={mapEmbedUrl(p.query)} title={p.name} className="h-full w-full" loading="eager" referrerPolicy="no-referrer-when-downgrade" />
+        <iframe key={p.query + (p.from ?? "")} src={mapEmbedUrl(p.query, 14, p.from)} title={p.name} className="h-full w-full" loading="eager" referrerPolicy="no-referrer-when-downgrade" />
       </div>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1 cursor-grab" {...dragOut({ from: card.id, kind: "map", title: p.name, data: { places: [p] } })} title="カードの外へドラッグすると、この場所だけの地図のカードにして残します">
@@ -904,13 +959,14 @@ function MapCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, t
             {places.length > 1 && <span className="mr-2 font-mono text-cyan-300">{sel + 1}</span>}
             {p.name}
           </div>
+          {p.from && <p className="text-sm text-cyan-300/80">{p.from} からの道順</p>}
           {p.note && (
             <p className="text-base leading-snug text-slate-300">
               <Emph text={p.note} />
             </p>
           )}
         </div>
-        <button onClick={() => onOpenLink(mapOpenUrl(p.query), `${p.name}の地図`)} className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 text-base hover:bg-slate-800">
+        <button onClick={() => onOpenLink(p.from ? mapDirUrl(p.query, p.from) : mapOpenUrl(p.query), `${p.name}の地図`)} className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 text-base hover:bg-slate-800">
           <ExternalIcon className="h-4 w-4" />
           Google マップ
         </button>

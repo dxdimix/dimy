@@ -104,3 +104,25 @@ describe("施設のカード", () => {
     expect(() => normalizeCard({ kind: "place", title: "" })).toThrow("title");
   });
 });
+
+import { commonsResults } from "../agent/tools/cards.mjs";
+
+describe("写真と道順のカード", () => {
+  it("言葉で探す写真・道順の出発地", () => {
+    expect(normalizeCard({ kind: "image", title: "景色", query: "瀬戸大橋", count: 9 }).data).toEqual({ query: "瀬戸大橋", count: 4 });
+    expect(() => normalizeCard({ kind: "image", title: "x" })).toThrow("query");
+    expect(normalizeCard({ kind: "map", title: "道順", places: [{ name: "鷲羽山", from: "総社市" }] }).data.places[0].from).toBe("総社市");
+    expect(normalizeCard({ kind: "web", title: "公式", url: "https://example.com" }).data).toEqual({ url: "https://example.com" });
+  });
+  it("Wikimedia Commons の答えから写真だけを取り出す", () => {
+    const json = { query: { pages: {
+      "2": { index: 2, title: "File:B.png", imageinfo: [{ mime: "image/png", thumburl: "https://u/b.png", descriptionurl: "https://p/b" }] },
+      "1": { index: 1, title: "File:A.jpg", imageinfo: [{ mime: "image/jpeg", thumburl: "https://u/a.jpg", descriptionurl: "https://p/a" }] },
+      "3": { index: 3, title: "File:C.svg", imageinfo: [{ mime: "image/svg+xml", url: "https://u/c.svg" }] },
+    } } };
+    expect(commonsResults(json, 4)).toEqual([
+      { url: "https://u/a.jpg", title: "A", page: "https://p/a" },
+      { url: "https://u/b.png", title: "B", page: "https://p/b" },
+    ]);
+  });
+});

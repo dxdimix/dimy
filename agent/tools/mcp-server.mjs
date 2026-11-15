@@ -38,8 +38,8 @@ export const TOOLS = [
       "kind: list = 一覧（ニュースなど。items に title・url・note・image。image を省くと、url のページの見出し画像を自動で添える）" +
       " / video = 動画（YouTube の url。画面の中で再生できる）/ stats = 大事な数字（stats に label・value・unit。例: 日経平均 / 38,500 / 円）" +
       " / place = 施設 1 か所分（キャンプ場・動物園・ホテル・店・観光地など。title に名前、url、image、area＝市区町村、query＝地図で探す言葉、address、hours＝営業時間、prices＝料金表 [{label, value}]、points＝特徴、phone、note。天気は画面が area から出す）" +
-      " / map = 地図（places に name・query・note。query は Google マップで探す言葉＝施設名と市区町村、または住所。複数なら番号で切り替えられる）" +
-      " / points = 要点や手順の図（points に短い文の配列。手順なら style: steps）/ page = ページ（url。見出し画像を自動で添える）/ image = 画像（画像そのものの url）/ text = 短い文（text）。" +
+      " / map = 地図（places に name・query・note・from。from（出発地）を入れると、そこからの道順の地図になる。query は Google マップで探す言葉＝施設名と市区町村、または住所。複数なら番号で切り替えられる）" +
+      " / points = 要点や手順の図（points に短い文の配列。手順なら style: steps）/ page = ページへのリンク（url。見出し画像を自動で添える）/ web = ページそのものを画面に出す（公式ページなど。url）/ image = 写真（画像の url、または query＝探す言葉と count＝枚数 1〜4。名所・景色などを無料の写真集から探す）/ text = 短い文（text）。" +
       "場所・お店・施設・観光地の話では、list などと一緒に map も出す（cards で 1 回にまとめる）。文の中の大事な数字や言葉は **太字** で囲める。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
     inputSchema: {
       type: "object",
@@ -49,7 +49,7 @@ export const TOOLS = [
           description: "何枚かを 1 回で出すとき（最大 6 枚）。各要素は kind・title と、その種類の中身（items / places / url / stats / points / text など）。1 枚だけなら cards を使わず直接書いてよい。",
           items: { type: "object" },
         },
-        kind: { type: "string", enum: ["place", "list", "map", "video", "stats", "points", "page", "image", "text"] },
+        kind: { type: "string", enum: ["place", "list", "map", "video", "stats", "points", "page", "web", "image", "text"] },
         title: { type: "string", description: "カードの見出し（短く）" },
         items: {
           type: "array",
@@ -57,7 +57,15 @@ export const TOOLS = [
         },
         places: {
           type: "array",
-          items: { type: "object", properties: { name: { type: "string" }, query: { type: "string", description: "例: 砂川公園 岡山県総社市" }, note: { type: "string" } } },
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              query: { type: "string", description: "例: 砂川公園 岡山県総社市" },
+              note: { type: "string" },
+              from: { type: "string", description: "道順の出発地（例: 岡山県総社市）。入れると道順の地図" },
+            },
+          },
         },
         area: { type: "string", description: "place: 市区町村（例: 井原市）" },
         query: { type: "string" },
@@ -65,6 +73,7 @@ export const TOOLS = [
         hours: { type: "string", description: "place: 営業時間（例: 9:00〜17:00 / 火曜休み）" },
         prices: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" } } } },
         phone: { type: "string" },
+        count: { type: "number", description: "image: 探す写真の枚数（1〜4）" },
         stats: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" }, unit: { type: "string" } } } },
         points: { type: "array", items: { type: "string" } },
         style: { type: "string", enum: ["points", "steps"] },

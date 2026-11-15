@@ -4,7 +4,10 @@ export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "poi
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
-  places?: { name: string; query: string; note?: string }[];
+  places?: { name: string; query: string; note?: string; from?: string }[];
+  /** image: 言葉で探した写真（PC の DIMY が Wikimedia Commons から探して書き足す） */
+  images?: { url: string; title: string; page: string }[];
+  count?: number;
   /** place: 施設 1 か所分 */
   area?: string;
   query?: string;
@@ -112,9 +115,15 @@ export function emphasize(text: string): { text: string; strong: boolean }[] {
   return out;
 }
 
-/** Google マップを画面の中に出す URL（API キーの要らない埋め込み） */
-export function mapEmbedUrl(query: string, zoom = 14): string {
+/** Google マップを画面の中に出す URL（API キーの要らない埋め込み）。from（出発地）があれば道順 */
+export function mapEmbedUrl(query: string, zoom = 14, from?: string): string {
+  if (from) return `https://maps.google.com/maps?saddr=${encodeURIComponent(from)}&daddr=${encodeURIComponent(query)}&hl=ja&output=embed`;
   return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=${zoom}&hl=ja&output=embed`;
+}
+
+/** 道順を Google マップで開く URL。origin を省くと、その端末の現在地から（スマホは地図のアプリが開く） */
+export function mapDirUrl(to: string, from?: string): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(to)}${from ? `&origin=${encodeURIComponent(from)}` : ""}&travelmode=driving`;
 }
 
 /** Google マップで開く URL */
@@ -160,4 +169,9 @@ export function webCard(url: string, title: string, vw: number, vh: number): Car
 export function youtubeId(url: string): string | null {
   const e = youtubeEmbed(url);
   return e ? e.split("/").pop() ?? null : null;
+}
+
+/** Google 画像検索のページ（写真のカードで、デスクトップでは中にそのまま出す） */
+export function googleImagesUrl(query: string): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}&udm=2&hl=ja`;
 }

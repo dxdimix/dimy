@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 loadEnv({ path: path.join(ROOT, ".env.local"), quiet: true });
 aliasLegacyEnv();
 
-const KINDS = ["list", "video", "points", "page", "image", "text", "stats", "map", "place"];
+const KINDS = ["list", "video", "points", "page", "image", "text", "stats", "map", "place", "web"];
 const isUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
 
 /** 道具に渡された中身を、画面に出せる形に整える（変なものは落とす） */
@@ -63,17 +63,25 @@ export function normalizeCard(a) {
         name: String(x?.name ?? "").slice(0, 80),
         query: String(x?.query || x?.address || x?.name || "").slice(0, 200),
         note: x?.note ? String(x.note).slice(0, 200) : undefined,
+        // 道順: 出発地（例: 総社市）。あれば、出発地からの道順の地図にする
+        from: x?.from ? String(x.from).slice(0, 120) : undefined,
       }))
       .filter((x) => x.name && x.query);
     if (!data.places.length) throw new Error("places が空です。");
   } else if (kind === "text") {
     data.text = String(a.text ?? "").slice(0, 1000);
     if (!data.text) throw new Error("text が空です。");
+  } else if (kind === "image" && !isUrl(a.url)) {
+    // 画像を言葉で探す（例: 「瀬戸大橋 鷲羽山 景色」）。写真は PC の DIMY が無料の写真集（Wikimedia Commons）から探して、あとから書き足す
+    data.query = String(a.query ?? "").slice(0, 120);
+    data.count = Math.min(4, Math.max(1, Number(a.count) || 1));
+    if (!data.query) throw new Error("image には url か query（探す言葉）が必要です。");
+    if (a.note) data.note = String(a.note).slice(0, 300);
   } else {
     if (!isUrl(a.url)) throw new Error("url（http / https）が必要です。");
     data.url = a.url;
     if (a.note) data.note = String(a.note).slice(0, 300);
-    if (kind === "page" && isUrl(a.image)) data.image = a.image;
+    if ((kind === "page" || kind === "web") && isUrl(a.image)) data.image = a.image;
   }
   return { kind, title, data };
 }
@@ -107,6 +115,47 @@ export async function findPageImage(url, timeoutMs = 3000) {
   }
 }
 
+/**
+ * 言葉で写真を探す（Wikimedia Commons。無料・キーなし。名所や景色に強い）。見つからなければ空。
+ * @returns {Promise<{ url: string, title: string, page: string }[]>}
+ */
+export async function findCommonsImages(query, count = 1, timeoutMs = 5000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const u = new URL("https://commons.wikimedia.org/w/api.php");
+    for (const [k, v] of Object.entries({
+      action: "query",
+      format: "json",
+      generator: "search",
+      gsrsearch: `${query} filetype:bitmap`,
+      gsrnamespace: "6",
+      gsrlimit: String(Math.min(10, count * 3)),
+      prop: "imageinfo",
+      iiprop: "url|mime",
+      iiurlwidth: "1280",
+    }))
+      u.searchParams.set(k, v);
+    const res = await fetch(u, { signal: ctrl.signal, headers: { "user-agent": "DIMY personal assistant" } });
+    if (!res.ok) return [];
+    return commonsResults(await res.json(), count);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Wikimedia Commons の答えから、写真（JPEG・PNG）を検索の順に取り出す */
+export function commonsResults(json, count) {
+  const pages = Object.values(json?.query?.pages ?? {}).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  return pages
+    .map((p) => ({ info: p.imageinfo?.[0], title: String(p.title ?? "").replace(/^File:|\.[a-z]+$/gi, "") }))
+    .filter((x) => x.info && /image\/(jpeg|png)/.test(x.info.mime ?? ""))
+    .slice(0, count)
+    .map((x) => ({ url: x.info.thumburl || x.info.url, title: x.title, page: x.info.descriptionurl ?? "" }));
+}
+
 /** HTML の頭から見出し画像の URL を取り出す（相対の URL は絶対にする） */
 export function pageImageFromHtml(html, base) {
   const metas = html.match(/<meta\b[^>]*>/gi) ?? [];
@@ -135,7 +184,13 @@ async function addImages(card) {
         if (!it.image && it.url) it.image = await findPageImage(it.url);
       }),
     );
-  } else if ((card.kind === "page" || card.kind === "place") && !card.data.image && card.data.url) {
+  } else if (card.kind === "image" && card.data.query) {
+    const found = await findCommonsImages(card.data.query, card.data.count ?? 1);
+    if (found.length) {
+      card.data.images = found;
+      card.data.url = found[0].url;
+    }
+  } else if ((card.kind === "page" || card.kind === "place" || card.kind === "web") && !card.data.image && card.data.url) {
     card.data.image = await findPageImage(card.data.url);
   }
 }
@@ -158,10 +213,11 @@ export async function showCard(a) {
       .then(() => sb.from("cards").update({ data: card.data }).eq("id", rows[i].id))
       .catch(() => {});
   });
-  return `画面にカードを ${list.length} 枚出しました。答え（候補の名前などの中身）をこのカードより前に文章で書いていれば、何も書き足さずに終えてください。まだなら、答えを 1〜3 文で書いてください（「調べますね」などの前置きは答えではありません）。「すでにお話ししたとおり」「カードに出しました」のような中身のない文は書かないでください。`;
+  return `画面にカードを ${list.length} 枚出しました。話の続きがあれば、次の 1 文を書き、その文に合うカードがあれば、また show_card を呼んでください（話す文とカードを交互に）。もう話すことがなければ、何も書き足さずに終えてください。「調べますね」などの前置きは答えではありません。答えをまだ話していなければ、必ず中身（名前・時間・距離など）を話してください。「すでにお話ししたとおり」「カードに出しました」のような中身のない文は書かないでください。`;
 }
 
 function needsImages(card) {
+  if (card.kind === "image") return Boolean(card.data.query) && !card.data.url;
   if (card.kind === "list") return card.data.items.some((it) => !it.image && it.url);
-  return (card.kind === "page" || card.kind === "place") && !card.data.image && Boolean(card.data.url);
+  return (card.kind === "page" || card.kind === "place" || card.kind === "web") && !card.data.image && Boolean(card.data.url);
 }
