@@ -6,7 +6,7 @@
 // - 右上のアイコン: 会話（履歴と文字入力のパネル）、ブックマーク、覚えていること、設定、全画面
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
-import { captureScreen, shrinkImage, useDimyExtension } from "@/lib/extension";
+import { captureScreen, shrinkImage, useDimyExtension, useIsDimyPc } from "@/lib/extension";
 import { Showcase } from "./Showcase";
 import { BUILTIN_TITLE, builtinCardsFor, chatCard, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
@@ -76,7 +76,6 @@ const VOICE_KEY = "dimy.voice";
 const RATE_KEY = "dimy.rate"; // 話す速さ
 const PITCH_KEY = "dimy.pitch"; // 声の高さ
 const VOLUME_KEY = "dimy.volume"; // ディミの声の大きさ（PC 全体の音量とは別）
-const OPEN_ON_KEY = "dimy.openOn"; // ディミの外で開く場所（"pc": DIMY が動いている PC の Chrome / "here": この端末のブラウザ）
 const SITE_ACCOUNTS_KEY = "dimy.siteAccounts"; // サイトごとに開く Chrome のプロフィール（{ サイト名: プロフィールのフォルダ名 }。"*" は指定がないとき）
 const SILENCE_KEY = "dimy.silenceSec"; // 話し終わりとみなすまでの無音の時間（秒）
 // 返事のあと、続けて話せる時間（秒）。利用者の決まりで、既定は 0 = 返事が終わったらマイクを切る
@@ -678,23 +677,10 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   // サイトごとのアカウント（設定の「アカウント」タブで決める。決めていなければマスターアカウント）
   const [siteAccounts, setSiteAccounts] = useState<Record<string, string>>({});
   // 開く場所（端末ごと）。スマホは最初から「この端末」、それ以外は「PC の Chrome」
-  const [openOn, setOpenOnRaw] = useState<"pc" | "here">("pc");
-  // 開く場所は、どの端末でも共通（利用者の決まり: なるべくどこでも同じ環境に）。
-  // 以前の端末ごとの保存（device.<端末の番号>.openOn・ブラウザの dimy.openOn）は、共通の保存がまだなければ引き継ぐ
-  useEffect(() => {
-    let legacy: string | null = null;
-    try {
-      legacy = localStorage.getItem(OPEN_ON_KEY);
-    } catch {}
-    const v = getPref("openOn") ?? getPref(`device.${deviceId()}.openOn`) ?? legacy;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpenOnRaw(v === "here" || v === "pc" ? v : "pc");
-  }, [prefsVersion]);
-  const setOpenOn = (v: "pc" | "here") => {
-    setOpenOnRaw(v);
-    setPref("openOn", v);
-    logActivity(supabase, "settings", `開く場所（どの端末でも共通）: ${v === "pc" ? "デスクトップ PC の Chrome" : "使っている端末のブラウザ"}`);
-  };
+  // 開く場所: 話しかけた端末で開く（利用者の決まり）。DIMY が動いているデスクトップ PC なら、PC の DIMY が Chrome で
+  // アカウントの指定どおりに開く。ノート・スマホなどは、その端末のブラウザで開く。
+  // デスクトップ PC かどうかは、拡張機能が知らせる（PC の DIMY が拡張機能のフォルダに置いた印）
+  const isPcScreen = useIsDimyPc();
   // サイトごとのアカウントは、どの端末でも共通（表 user_settings）。
   // 以前この端末のブラウザに保存していたものは、データベースにまだ何もなければ引き継ぐ
   useEffect(() => {
@@ -754,8 +740,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       : profile
         ? (nicknames[profile] ?? pcState?.chrome_profiles.find((p) => p.dir === profile)?.name ?? profile)
         : "マスターアカウント";
-    logActivity(supabase, "open_chrome", `${title} ${url}（${openOn === "here" ? "この端末のブラウザ" : who}）`);
-    if (online && openOn === "pc") {
+    logActivity(supabase, "open_chrome", `${title} ${url}（${isPcScreen ? who : "この端末のブラウザ"}）`);
+    if (online && isPcScreen) {
       announce(`${title}を開きます`, quiet);
       const r = await sendPcCommand(supabase, "open_url", { url, ...(account ? { account } : profile ? { profile } : {}) }, 15_000);
       if (r.ok) return;
@@ -1277,8 +1263,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           setWakeOn={changeWake}
           profiles={pcState?.chrome_profiles ?? null}
           masterEmail={session.user.email ?? ""}
-          openOn={openOn}
-          setOpenOn={setOpenOn}
+          isPcScreen={isPcScreen}
           siteAccounts={siteAccounts}
           setSiteAccount={setSiteAccount}
           onRefreshProfiles={refreshPcState}

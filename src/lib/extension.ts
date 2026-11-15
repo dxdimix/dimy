@@ -31,6 +31,19 @@ export function useDimyExtension(): string | null {
 
 export const hasDimyExtension = () => read() !== null;
 
+/** この端末が「DIMY が動いているデスクトップ PC」か（PC の DIMY が拡張機能のフォルダに置いた印を、拡張機能が知らせる） */
+export function useIsDimyPc(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const obs = new MutationObserver(cb);
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-dimy-pc"] });
+      return () => obs.disconnect();
+    },
+    () => document.documentElement.getAttribute("data-dimy-pc") === "1",
+    () => false,
+  );
+}
+
 /** 拡張機能に、この画面の写真を撮ってもらう（JPEG の data URL）。拡張機能がなければエラー */
 export function captureScreen(timeoutMs = 10_000): Promise<string> {
   if (!hasDimyExtension()) return Promise.reject(new Error("DIMY の拡張機能が入っていません。"));

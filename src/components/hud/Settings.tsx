@@ -54,8 +54,8 @@ export type SettingsProps = {
   // アカウント
   profiles: ChromeProfile[] | null;
   masterEmail: string;
-  openOn: "pc" | "here";
-  setOpenOn: (v: "pc" | "here") => void;
+  /** この端末が DIMY の動いているデスクトップ PC か */
+  isPcScreen: boolean;
   siteAccounts: Record<string, string>;
   setSiteAccount: (site: string, dir: string | null) => void;
   onRefreshProfiles: () => void;
@@ -339,24 +339,14 @@ function AccountTab(p: SettingsProps) {
         {master ? `（${master.name}・${master.email}）` : ""}で開きます。
       </p>
       <div>
-        <div className="mb-1.5 text-cyan-100">頼んだときに開く場所</div>
-        <div className="space-y-1 text-xs">
-          <label className="flex cursor-pointer items-start gap-2">
-            <input type="radio" name="dimy-open-on" checked={p.openOn === "pc"} onChange={() => p.setOpenOn("pc")} className="mt-0.5 accent-cyan-400" />
-            <span>
-              <span className="text-cyan-100">DIMY が動いているデスクトップ PC の Chrome</span>
-              <span className="block text-slate-400">下のアカウントの設定どおりに開きます。デスクトップ PC で使うとき向け。</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2">
-            <input type="radio" name="dimy-open-on" checked={p.openOn === "here"} onChange={() => p.setOpenOn("here")} className="mt-0.5 accent-cyan-400" />
-            <span>
-              <span className="text-cyan-100">使っている端末のブラウザ</span>
-              <span className="block text-slate-400">話しかけた端末（デスクトップ・ノート・スマホ）のブラウザで開きます。そのブラウザでログインしているアカウントで開きます（下のアカウントの設定は使いません）。</span>
-            </span>
-          </label>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">この設定は、どの端末でも共通です。</p>
+        <div className="mb-1.5 text-cyan-100">開く場所</div>
+        <p className="text-xs leading-relaxed text-slate-300">
+          話しかけた端末で開きます。デスクトップ PC で頼んだときは、PC の Chrome で下のアカウントの設定どおりに開きます。ノート PC やスマホで頼んだときは、その端末のブラウザで開きます（下のアカウントの設定は使いません）。
+        </p>
+        <p className="mt-1 text-xs text-slate-400">
+          この端末: <span className="text-cyan-200">{p.isPcScreen ? "DIMY が動いているデスクトップ PC" : "デスクトップ PC 以外（この端末のブラウザで開く）"}</span>
+          {!p.isPcScreen && "（デスクトップ PC なのにこう出るときは、DIMY の拡張機能を入れてください）"}
+        </p>
       </div>
       {p.profiles === null ? (
         <p className="text-slate-400">PC の情報がまだ届いていません（PC の DIMY が動いていれば、数分で出ます）。</p>

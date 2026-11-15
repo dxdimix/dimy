@@ -507,6 +507,14 @@ log(`Claude Code の場所: ${CLAUDE_BIN}`);
   else if (r === "already") log("Claude Code の場所は、Windows の利用者の PATH に入っています。");
   else if (r !== "skipped") log(`Claude Code の場所を PATH に足せませんでした: ${r}`);
 }
+// 拡張機能のフォルダに「ここは DIMY が動いているデスクトップ PC」の印を置く。
+// 画面は、拡張機能を通してこれを知り、頼まれたページを PC の Chrome（アカウントの指定どおり）で開く。印のない端末はその端末のブラウザで開く
+try {
+  const extDir = path.join(ROOT, "extension");
+  if (fs.existsSync(extDir)) fs.writeFileSync(path.join(extDir, "host.json"), JSON.stringify({ pc: true, machine: os.hostname() }) + "\n");
+} catch (e) {
+  log(`拡張機能のフォルダに印を置けませんでした: ${e instanceof Error ? e.message : String(e)}`);
+}
 // 料金の安全確認: Anthropic の API キーが PC のどこかにないか（場所だけ記録する。中身は読まない）
 try {
   const envFiles = [path.join(ROOT, ".env.local"), path.join(ROOT, ".env")];

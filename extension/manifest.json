@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DIMY",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ディミの画面の中で Web ページを開けるようにする（ディミの画面の中で開くときだけ、ページの「中に表示しないで」の印を外す）。ディミの画面の写真を撮る。",
   "minimum_chrome_version": "116",
   "permissions": [

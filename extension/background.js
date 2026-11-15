@@ -30,11 +30,22 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
   if (info.url && !isDimy(info.url)) stopFramesIn(tabId);
 });
 
+// この Chrome が「DIMY が動いているデスクトップ PC」か。PC の DIMY が、この拡張機能のフォルダに印（host.json）を置く。
+// ノート PC などに手で入れた拡張機能には、印がない
+async function isDimyPc() {
+  try {
+    const res = await fetch(chrome.runtime.getURL("host.json"), { cache: "no-store" });
+    return res.ok && (await res.json()).pc === true;
+  } catch {
+    return false;
+  }
+}
+
 // 画面の写真: 頼んできたディミのタブがあるウィンドウの、見えている部分を撮る
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg?.type === "hello" && sender.tab?.id !== undefined && isDimy(sender.tab.url)) {
-    allowFramesIn(sender.tab.id)
-      .then(() => reply({ ok: true }))
+    Promise.all([allowFramesIn(sender.tab.id).catch(() => {}), isDimyPc()])
+      .then(([, pc]) => reply({ ok: true, pc }))
       .catch((e) => reply({ ok: false, error: String(e?.message || e) }));
     return true;
   }

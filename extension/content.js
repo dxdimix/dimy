@@ -24,7 +24,13 @@
   });
 
   // このタブの枠の中で、ページを開けるようにしてもらう
-  chrome.runtime.sendMessage({ type: "hello" }, () => void chrome.runtime.lastError);
+  // あわせて、この端末が DIMY の動いているデスクトップ PC かを教えてもらい、ページに知らせる（<html data-dimy-pc="1">）
+  chrome.runtime.sendMessage({ type: "hello" }, (res) => {
+    void chrome.runtime.lastError;
+    if (res?.pc) document.documentElement?.setAttribute("data-dimy-pc", "1");
+    else document.documentElement?.removeAttribute("data-dimy-pc");
+    window.postMessage({ dimyExtReady: version }, location.origin);
+  });
 
   window.postMessage({ dimyExtReady: version }, location.origin);
 })();
