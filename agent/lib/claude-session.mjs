@@ -234,10 +234,33 @@ export function decodeOutput(buf) {
  * 書いている途中の塊も、前の塊に含まれているうちは出さない。
  * @param {string[]} blocks
  */
+/** ディミの独り言（「（答えはすでにお話ししたので、書き足すことはありません。）」など）を返事から取り除く。読み上げられてしまうため */
+export function dropAsides(text) {
+  return text
+    .replace(/[（(][^（）()]*(書き足|合図|お話ししたので|すでに.{0,8}(話|書)|カードに出し|道具)[^（）()]*[）)]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .split("")
+    .reduce(
+      // 対になる「（」のない「）」は取り除く（独り言を消したあとに残るため）
+      (acc, ch) => {
+        if (ch === "（" || ch === "(") acc.depth++;
+        else if (ch === "）" || ch === ")") {
+          if (acc.depth === 0) return acc;
+          acc.depth--;
+        }
+        acc.out += ch;
+        return acc;
+      },
+      { out: "", depth: 0 },
+    )
+    .out.trim();
+}
+
 export function joinBlocks(blocks) {
   const norm = (t) => t.replace(/[\s、。,.!！?？「」]/g, "");
   const out = [];
-  for (const b of blocks) {
+  for (const raw of blocks) {
+    const b = dropAsides(raw);
     const t = b.trim();
     if (!t) continue;
     if (out.length && norm(out.join("")).includes(norm(t))) continue;

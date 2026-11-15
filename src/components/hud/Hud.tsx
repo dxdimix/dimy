@@ -172,9 +172,19 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const spokenSoFar = useRef(""); // この返事で読み始めた文
   const replyDone = useRef(true); // 返事を書き終えたか（読み終えたら、残りのカードを全部出す）
   const speakOnRef = useRef(true);
+  const queuedSentences = useRef(0); // 読み上げを頼んで、まだ読み始めていない文の数
   const revealCardsFor = useCallback((sentence: string) => {
     spokenSoFar.current += sentence;
-    setCards((prev) => (prev.some((c) => c.hidden && sayMatches(sentence, c.data.say)) ? prev.map((c) => (c.hidden && sayMatches(sentence, c.data.say) ? { ...c, hidden: false } : c)) : prev));
+    setCards((prev) => {
+      let next = prev.map((c) => (c.hidden && sayMatches(sentence, c.data.say) ? { ...c, hidden: false } : c));
+      // 話とカードの終わりをそろえる（利用者の決まり: 話し終えてから一度に出す・カードが先に出そろって話だけ続く、のどちらも避ける）。
+      // 返事を書き終えていれば、残りの文の数より隠れているカードが多いぶんを、古い順に前倒しで出す。最後の文を読み始めるときに全部出る
+      if (replyDone.current) {
+        let extra = next.filter((c) => c.hidden).length - queuedSentences.current;
+        if (extra > 0) next = next.map((c) => (c.hidden && extra-- > 0 ? { ...c, hidden: false } : c));
+      }
+      return next.some((c, i) => c !== prev[i]) ? next : prev;
+    });
   }, []);
   const revealAllCards = useCallback(() => setCards((prev) => (prev.some((c) => c.hidden) ? prev.map((c) => (c.hidden ? { ...c, hidden: false } : c)) : prev)), []);
   const router = useRouter();
@@ -275,6 +285,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           turnRef.current = { id: (payload.new as Message).id, cards: new Map() };
           spokenSoFar.current = "";
           replyDone.current = false;
+          queuedSentences.current = 0;
           setCards((prev) => [
             ...prev.filter((c) => c.pinned),
             ...kinds.map((k) => ({ id: `builtin-${k}-${(payload.new as Message).id}`, kind: k, title: BUILTIN_TITLE[k], data: {}, pinned: false, at: Date.now() })),
@@ -656,7 +667,14 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       const { chunk, next } = takeSpeakable(m.content, from, final, from === 0 ? 0 : 40);
       spokenUpTo.current.set(m.id, next);
       // 1 文ずつ読み、読み始めた文に合うカード（say）を出す（話に合わせて 1 枚ずつ見せる。利用者の希望）
-      if (speakOn && chunk && leaderRef.current) for (const sentence of splitSentences(toSpeech(chunk))) speak(sentence, () => revealCardsFor(sentence));
+      if (speakOn && chunk && leaderRef.current)
+        for (const sentence of splitSentences(toSpeech(chunk))) {
+          queuedSentences.current++;
+          speak(sentence, () => {
+            queuedSentences.current = Math.max(0, queuedSentences.current - 1);
+            revealCardsFor(sentence);
+          });
+        }
       else if (chunk) revealCardsFor(chunk);
       if (final) {
         liveIds.current.delete(m.id);
@@ -667,6 +685,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           if (speakOn) followUpAfterSpeech.current = true;
           else wakeRef.current?.followUp();
         }
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 返事が届いた時刻から字幕を出す
         setCaptionUntil(Date.now() + captionSec * 1000);
       }
     }
