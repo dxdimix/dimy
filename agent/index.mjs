@@ -26,6 +26,10 @@ import { findClaudeBin, refreshWindowsPath } from "./lib/winpath.mjs";
 refreshWindowsPath();
 const CLAUDE_BIN = findClaudeBin();
 
+// Node の「この書き方は将来使えなくなる」という注意（Windows で cmd.exe 経由で Claude Code を起動するときに出る）は、
+// 動きに関係がないので出さない（記録に毎回「エラー」として残ってしまうため）
+process.noDeprecation = true;
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // 画面の設定の「再起動」で書く印（次の起動で、すぐ新しい版を確かめる）
 const UPDATE_NOW_FILE = path.join(ROOT, "agent", ".update-now");

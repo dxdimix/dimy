@@ -6,6 +6,14 @@
 // 必要な環境変数（秘密ではない）: DIMY_MAINT_URL（Supabase の URL）、DIMY_MAINT_ANON（publishable キー）
 // 合言葉（dimy-maint-key）は、この環境の通信の仕組み（ネットワークの秘密の保存）が自動で付ける。ここには書かない。
 
+import { spawnSync } from "node:child_process";
+
+// クラウドの作業環境では、通信が中継（HTTPS_PROXY）を通る。Node の fetch は中継を使う設定が要るので、付けて起動し直す
+if (process.env.HTTPS_PROXY && process.env.NODE_USE_ENV_PROXY !== "1") {
+  const r = spawnSync(process.execPath, ["--no-warnings", ...process.argv.slice(1)], { stdio: "inherit", env: { ...process.env, NODE_USE_ENV_PROXY: "1" } });
+  process.exit(r.status ?? 1);
+}
+
 const url = (process.env.DIMY_MAINT_URL || "").replace(/\/+$/, "");
 const anon = process.env.DIMY_MAINT_ANON || "";
 if (!url || !anon) {
