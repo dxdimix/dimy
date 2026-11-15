@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 loadEnv({ path: path.join(ROOT, ".env.local"), quiet: true });
 aliasLegacyEnv();
 
-const KINDS = ["list", "video", "points", "page", "image", "text", "stats", "map"];
+const KINDS = ["list", "video", "points", "page", "image", "text", "stats", "map", "place"];
 const isUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
 
 /** 道具に渡された中身を、画面に出せる形に整える（変なものは落とす） */
@@ -39,6 +39,23 @@ export function normalizeCard(a) {
       .map((x) => ({ label: String(x?.label ?? "").slice(0, 40), value: String(x?.value ?? "").slice(0, 20), unit: x?.unit ? String(x.unit).slice(0, 10) : undefined }))
       .filter((x) => x.label && x.value);
     if (!data.stats.length) throw new Error("stats が空です。");
+  } else if (kind === "place") {
+    // 施設（キャンプ場・動物園・ホテル・店など）1 か所分。調べものの候補ごとに 1 枚
+    const str = (v, n) => (v ? String(v).slice(0, n) : undefined);
+    if (isUrl(a.url)) data.url = a.url;
+    if (isUrl(a.image)) data.image = a.image;
+    data.area = str(a.area, 40); // 市区町村（天気と地図に使う）
+    data.query = str(a.query || [a.title, a.area].filter(Boolean).join(" "), 200); // 地図で探す言葉
+    data.address = str(a.address, 120);
+    data.hours = str(a.hours, 200);
+    data.phone = str(a.phone, 30);
+    data.note = str(a.note, 300);
+    data.prices = (Array.isArray(a.prices) ? a.prices : [])
+      .slice(0, 8)
+      .map((x) => ({ label: String(x?.label ?? "").slice(0, 40), value: String(x?.value ?? "").slice(0, 40) }))
+      .filter((x) => x.label && x.value);
+    data.points = (Array.isArray(a.points) ? a.points : []).slice(0, 5).map((x) => String(x).slice(0, 120)).filter(Boolean);
+    if (!title) throw new Error("title（施設の名前）が必要です。");
   } else if (kind === "map") {
     data.places = (Array.isArray(a.places) ? a.places : [])
       .slice(0, 8)
@@ -118,14 +135,15 @@ async function addImages(card) {
         if (!it.image && it.url) it.image = await findPageImage(it.url);
       }),
     );
-  } else if (card.kind === "page" && !card.data.image) {
+  } else if ((card.kind === "page" || card.kind === "place") && !card.data.image && card.data.url) {
     card.data.image = await findPageImage(card.data.url);
   }
 }
 
 export async function showCard(a) {
   // 何枚かをまとめて出せる（cards に並べる）。道具を 1 回で済ませると、返事が早く終わる
-  const list = (Array.isArray(a.cards) && a.cards.length ? a.cards : [a]).slice(0, 3).map(normalizeCard);
+  // 1 回で 6 枚まで（施設の候補 5 か所＋地図 1 枚を、まとめて出せるように）
+  const list = (Array.isArray(a.cards) && a.cards.length ? a.cards : [a]).slice(0, 6).map(normalizeCard);
   const raw = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const key = process.env.SUPABASE_SECRET_KEY?.trim();
   const owner = process.env.DIMY_OWNER_ID;
@@ -145,5 +163,5 @@ export async function showCard(a) {
 
 function needsImages(card) {
   if (card.kind === "list") return card.data.items.some((it) => !it.image && it.url);
-  return card.kind === "page" && !card.data.image;
+  return (card.kind === "page" || card.kind === "place") && !card.data.image && Boolean(card.data.url);
 }

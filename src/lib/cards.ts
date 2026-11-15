@@ -1,10 +1,17 @@
 // 画面のカード（返事の中身を目でも見せる）の形と、言葉から出すカードを決める決まり。
 
-export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat" | "web";
+export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat" | "web" | "place";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
   places?: { name: string; query: string; note?: string }[];
+  /** place: 施設 1 か所分 */
+  area?: string;
+  query?: string;
+  address?: string;
+  hours?: string;
+  phone?: string;
+  prices?: { label: string; value: string }[];
   /** talk: 履歴から呼び出した会話（あなたの発言と DIMY の返事） */
   q?: string;
   a?: string;

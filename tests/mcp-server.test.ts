@@ -94,3 +94,13 @@ describe("カードをまとめて出す", () => {
     expect(Object.keys(t.inputSchema.properties)).toContain("cards");
   });
 });
+
+describe("施設のカード", () => {
+  it("営業時間・料金・特徴を整え、地図の言葉を作る", () => {
+    const c = normalizeCard({ kind: "place", title: "経ヶ丸オートキャンプ場", area: "井原市", hours: "9:00〜17:00", prices: [{ label: "オートサイト", value: "4,000円" }, { label: "" }], points: ["80m 滑り台"] });
+    expect(c.data.query).toBe("経ヶ丸オートキャンプ場 井原市");
+    expect(c.data.prices).toEqual([{ label: "オートサイト", value: "4,000円" }]);
+    expect(c.data.points).toEqual(["80m 滑り台"]);
+    expect(() => normalizeCard({ kind: "place", title: "" })).toThrow("title");
+  });
+});

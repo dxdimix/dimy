@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
 import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed, youtubeId } from "@/lib/cards";
-import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
+import { fetchForecast, fetchJma, findPlace, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 import { getPref } from "@/lib/prefs";
 import { hasDimyExtension, WEB_FRAME_SANDBOX } from "@/lib/extension";
@@ -318,6 +318,8 @@ function CompactBody({ card, open, weather, session, all }: { card: Card; open: 
       const id = d.url ? youtubeId(d.url) : null;
       return d.url ? <Row onClick={() => open(d.url!, card.title)} img={id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : undefined} title={card.title} note="動画を開く" /> : null;
     }
+    case "place":
+      return <PlaceCompact card={card} open={open} />;
     case "page":
     case "web":
       return d.url ? <Row onClick={() => open(d.url!, card.title)} img={d.image} title={card.title} note={d.note ?? host(d.url)} /> : null;
@@ -391,6 +393,185 @@ function DateLine() {
   );
 }
 
+/** その場所（市区町村）の 3 日分の天気。地名から場所を調べて（Open-Meteo の地名検索）、予報を読む。同じ地名は一度だけ調べる */
+type AreaDay = { date: string; code: number; max: number; min: number; rain: number | null };
+const areaWeatherCache = new Map<string, Promise<AreaDay[] | null>>();
+function useAreaWeather(area?: string): AreaDay[] | null {
+  const [days, setDays] = useState<AreaDay[] | null>(null);
+  useEffect(() => {
+    if (!area) return;
+    let alive = true;
+    if (!areaWeatherCache.has(area)) {
+      areaWeatherCache.set(
+        area,
+        findPlace(area)
+          .then(async (pl) => {
+            if (!pl) return null;
+            const today = new Date().toLocaleDateString("sv-SE", { timeZone: TZ });
+            return (await fetchForecast(pl)).days.filter((d) => d.date >= today).slice(0, 3);
+          })
+          .catch(() => null),
+      );
+    }
+    areaWeatherCache.get(area)!.then((d) => alive && setDays(d));
+    return () => {
+      alive = false;
+    };
+  }, [area]);
+  return days;
+}
+
+function AreaWeather({ area, compact = false }: { area?: string; compact?: boolean }) {
+  const days = useAreaWeather(area);
+  if (!area || !days?.length) return null;
+  const label = (i: number, date: string) => (i === 0 ? "今日" : i === 1 ? "明日" : new Date(`${date}T12:00:00+09:00`).toLocaleDateString("ja-JP", { timeZone: TZ, weekday: "short" }));
+  return (
+    <div className={"flex gap-1.5 " + (compact ? "" : "rounded-lg bg-slate-800/40 p-2")}>
+      {days.map((d, i) => (
+        <div key={d.date} className="flex flex-1 items-center justify-center gap-1.5">
+          <span className={"text-cyan-200 " + (compact ? "text-[10px]" : "text-sm")}>{label(i, d.date)}</span>
+          <WeatherArt code={d.code} size={compact ? 22 : 32} />
+          <span className={"font-mono " + (compact ? "text-[11px]" : "text-sm")}>
+            <b className="text-rose-300">{Math.round(d.max)}</b>/<b className="text-sky-300">{Math.round(d.min)}</b>
+            {d.rain !== null && <span className="ml-1 text-sky-200">{d.rain}%</span>}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 施設 1 か所分（写真・営業時間・料金表・特徴・その場所の天気・地図・公式ページ） */
+function PlaceCard({ card, onOpenLink, onOpenChrome }: { card: Card; onOpenLink: (url: string, title: string) => void; onOpenChrome: (url: string, title: string) => void }) {
+  const d = card.data;
+  const [showMap, setShowMap] = useState(false);
+  return (
+    <div className="space-y-3">
+      {d.image && (
+        <button onClick={() => d.url && onOpenLink(d.url, card.title)} className="block w-full">
+          <Photo src={d.image} alt={d.url ?? card.title} className="aspect-[16/7] w-full rounded-lg" />
+        </button>
+      )}
+      {(d.area || d.address) && <p className="text-sm text-slate-400">{d.address ?? d.area}</p>}
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1.5 text-base">
+        {d.hours && (
+          <>
+            <dt className="text-sm text-cyan-300/80">営業時間</dt>
+            <dd className="leading-snug">
+              <Emph text={d.hours} />
+            </dd>
+          </>
+        )}
+        {d.phone && (
+          <>
+            <dt className="text-sm text-cyan-300/80">電話</dt>
+            <dd className="font-mono">{d.phone}</dd>
+          </>
+        )}
+      </dl>
+      {!!d.prices?.length && (
+        <div className="overflow-hidden rounded-lg border border-cyan-400/20">
+          <div className="bg-cyan-400/10 px-3 py-1 text-sm text-cyan-200">料金</div>
+          <table className="w-full text-base">
+            <tbody>
+              {d.prices.map((p, i) => (
+                <tr key={i} className="border-t border-cyan-400/10">
+                  <td className="px-3 py-1 text-slate-300">{p.label}</td>
+                  <td className="px-3 py-1 text-right font-mono font-bold text-white">{p.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!!d.points?.length && (
+        <ul className="space-y-1">
+          {d.points.map((pt, i) => (
+            <li key={i} className="flex gap-2 text-base leading-snug">
+              <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
+              <span>
+                <Emph text={pt} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.note && (
+        <p className="text-sm leading-snug text-slate-300">
+          <Emph text={d.note} />
+        </p>
+      )}
+      <AreaWeather area={d.area} />
+      {showMap && d.query && (
+        <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-slate-800">
+          <iframe src={mapEmbedUrl(d.query)} title={card.title} className="h-full w-full" />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 text-base">
+        {d.url && (
+          <button onClick={() => onOpenLink(d.url!, card.title)} className="rounded-md border border-cyan-500/50 px-3 py-1.5 text-cyan-100 hover:bg-cyan-400/10">
+            公式ページ
+          </button>
+        )}
+        {d.query && (
+          <button onClick={() => setShowMap((v) => !v)} className="rounded-md border border-cyan-500/50 px-3 py-1.5 text-cyan-100 hover:bg-cyan-400/10">
+            {showMap ? "地図を閉じる" : "地図"}
+          </button>
+        )}
+        {d.query && (
+          <button onClick={() => onOpenChrome(mapOpenUrl(d.query!), `${card.title}の地図`)} className="flex items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 hover:bg-slate-800">
+            <ExternalIcon className="h-4 w-4" />
+            Google マップ
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** スマホの施設カード（要点だけ。押すと公式ページ・地図のアプリ） */
+function PlaceCompact({ card, open }: { card: Card; open: (url: string, title: string) => void }) {
+  const d = card.data;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-2.5">
+        {d.image && <Photo src={d.image} alt={d.url ?? card.title} className="h-14 w-20 shrink-0 rounded" />}
+        <div className="min-w-0 flex-1 text-xs leading-snug">
+          {d.area && <p className="text-slate-400">{d.area}</p>}
+          {d.hours && (
+            <p className="line-clamp-2 text-slate-200">
+              🕘 <Emph text={d.hours} />
+            </p>
+          )}
+          {!!d.prices?.length && (
+            <p className="line-clamp-2 text-slate-200">
+              ¥ {d.prices.slice(0, 3).map((p) => `${p.label} ${p.value}`).join("・")}
+            </p>
+          )}
+        </div>
+      </div>
+      {!!d.points?.length && (
+        <p className="line-clamp-2 text-xs text-slate-300">
+          <Emph text={d.points.join("・")} />
+        </p>
+      )}
+      <AreaWeather area={d.area} compact />
+      <div className="flex gap-2">
+        {d.url && (
+          <button onClick={() => open(d.url!, card.title)} className="flex-1 rounded-md border border-cyan-500/50 py-1.5 text-xs text-cyan-100 active:bg-cyan-400/10">
+            公式ページ
+          </button>
+        )}
+        {d.query && (
+          <button onClick={() => open(mapOpenUrl(d.query!), card.title)} className="flex-1 rounded-md border border-cyan-500/50 py-1.5 text-xs text-cyan-100 active:bg-cyan-400/10">
+            地図のアプリ
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** 大事な数字と **〇〇** を太く、明るく */
 function Emph({ text }: { text: string }) {
   return (
@@ -444,7 +625,7 @@ function CardView({
   place,
   session,
 }: Props & { card: Card; side: "left" | "right"; onGrab: (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => void; floating?: boolean }) {
-  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT", web: "WEB" }[card.kind];
+  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT", web: "WEB", place: "SPOT" }[card.kind];
   return (
     <div
       data-card-id={card.id}
@@ -547,6 +728,7 @@ export function CardBody({
       )}
       {card.kind === "list" && <ListCard card={card} onOpenLink={onOpenLink} />}
       {card.kind === "map" && <MapCard card={card} onOpenLink={onOpenLink} />}
+      {card.kind === "place" && <PlaceCard card={card} onOpenLink={onOpenLink} onOpenChrome={onOpenChrome} />}
       {card.kind === "stats" && (
         <div className={"grid gap-3 " + ((card.data.stats?.length ?? 0) > 4 ? "grid-cols-3" : "grid-cols-2")}>
           {card.data.stats?.map((s, i) => (
