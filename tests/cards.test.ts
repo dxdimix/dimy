@@ -30,3 +30,12 @@ describe("強調", () => {
     expect(emphasize("数字なし")).toEqual([{ text: "数字なし", strong: false }]);
   });
 });
+
+import { mapEmbedUrl, mapOpenUrl } from "../src/lib/cards";
+
+describe("地図", () => {
+  it("Google マップの URL", () => {
+    expect(mapEmbedUrl("砂川公園 総社市")).toBe("https://maps.google.com/maps?q=%E7%A0%82%E5%B7%9D%E5%85%AC%E5%9C%92%20%E7%B7%8F%E7%A4%BE%E5%B8%82&z=14&hl=ja&output=embed");
+    expect(mapOpenUrl("a b")).toBe("https://www.google.com/maps/search/?api=1&query=a%20b");
+  });
+});

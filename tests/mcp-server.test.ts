@@ -75,3 +75,14 @@ describe("カードの写真と数字", () => {
     });
   });
 });
+
+describe("地図のカード", () => {
+  it("query がなければ名前で探す", () => {
+    expect(normalizeCard({ kind: "map", title: "キャンプ場", places: [{ name: "砂川公園", query: "砂川公園 総社市" }, { name: "高間キャンプ場" }, { name: "" }] }).data).toEqual({
+      places: [
+        { name: "砂川公園", query: "砂川公園 総社市", note: undefined },
+        { name: "高間キャンプ場", query: "高間キャンプ場", note: undefined },
+      ],
+    });
+  });
+});

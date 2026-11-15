@@ -11,7 +11,7 @@
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card } from "@/lib/cards";
-import { emphasize, youtubeEmbed } from "@/lib/cards";
+import { emphasize, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
 import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 
@@ -135,7 +135,7 @@ const host = (u: string) => {
 };
 
 function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather, place, session }: Props & { card: Card; side: "left" | "right" }) {
-  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA" }[card.kind];
+  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP" }[card.kind];
   return (
     <div
       className={
@@ -158,6 +158,7 @@ function CardView({ card, side, onClose, onPin, onOpenLink, onOpenPage, weather,
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}
       {card.kind === "list" && <ListCard card={card} onOpenLink={onOpenLink} />}
+      {card.kind === "map" && <MapCard card={card} onOpenLink={onOpenLink} />}
       {card.kind === "stats" && (
         <div className={"grid gap-3 " + ((card.data.stats?.length ?? 0) > 4 ? "grid-cols-3" : "grid-cols-2")}>
           {card.data.stats?.map((s, i) => (
@@ -276,6 +277,55 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
               <div className="mt-1 line-clamp-2 text-base font-semibold leading-snug text-cyan-50 group-hover:underline">
                 <Emph text={it.title} />
               </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 地図（Google マップの埋め込み）。場所が複数なら、番号のボタンで切り替える */
+function MapCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, title: string) => void }) {
+  const places = card.data.places ?? [];
+  const [sel, setSel] = useState(0);
+  const p = places[Math.min(sel, places.length - 1)];
+  if (!p) return null;
+  return (
+    <div className="space-y-3">
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-slate-800">
+        <iframe key={p.query} src={mapEmbedUrl(p.query)} title={p.name} className="h-full w-full" loading="eager" referrerPolicy="no-referrer-when-downgrade" />
+      </div>
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xl font-bold leading-snug text-white">
+            {places.length > 1 && <span className="mr-2 font-mono text-cyan-300">{sel + 1}</span>}
+            {p.name}
+          </div>
+          {p.note && (
+            <p className="text-base leading-snug text-slate-300">
+              <Emph text={p.note} />
+            </p>
+          )}
+        </div>
+        <button onClick={() => onOpenLink(mapOpenUrl(p.query), `${p.name}の地図`)} className="flex shrink-0 items-center gap-1.5 rounded-md border border-slate-600 px-3 py-1.5 text-base hover:bg-slate-800">
+          <ExternalIcon className="h-4 w-4" />
+          Google マップ
+        </button>
+      </div>
+      {places.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {places.map((x, i) => (
+            <button
+              key={i}
+              onClick={() => setSel(i)}
+              className={
+                "flex max-w-full items-center gap-2 rounded-full border px-3 py-1 text-base " +
+                (i === sel ? "border-cyan-300 bg-cyan-400/25 font-semibold text-white" : "border-cyan-400/30 text-cyan-100 hover:bg-cyan-400/10")
+              }
+            >
+              <span className="font-mono font-bold">{i + 1}</span>
+              <span className="truncate">{x.name}</span>
             </button>
           ))}
         </div>

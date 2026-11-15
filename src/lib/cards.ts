@@ -1,9 +1,10 @@
 // 画面のカード（返事の中身を目でも見せる）の形と、言葉から出すカードを決める決まり。
 
-export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats";
+export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
+  places?: { name: string; query: string; note?: string }[];
   image?: string;
   points?: string[];
   style?: "points" | "steps";
@@ -73,4 +74,14 @@ export function emphasize(text: string): { text: string; strong: boolean }[] {
     push(part.slice(i), false);
   });
   return out;
+}
+
+/** Google マップを画面の中に出す URL（API キーの要らない埋め込み） */
+export function mapEmbedUrl(query: string, zoom = 14): string {
+  return `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=${zoom}&hl=ja&output=embed`;
+}
+
+/** Google マップで開く URL */
+export function mapOpenUrl(query: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }

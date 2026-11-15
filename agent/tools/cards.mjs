@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 loadEnv({ path: path.join(ROOT, ".env.local"), quiet: true });
 aliasLegacyEnv();
 
-const KINDS = ["list", "video", "points", "page", "image", "text", "stats"];
+const KINDS = ["list", "video", "points", "page", "image", "text", "stats", "map"];
 const isUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
 
 /** 道具に渡された中身を、画面に出せる形に整える（変なものは落とす） */
@@ -39,6 +39,16 @@ export function normalizeCard(a) {
       .map((x) => ({ label: String(x?.label ?? "").slice(0, 40), value: String(x?.value ?? "").slice(0, 20), unit: x?.unit ? String(x.unit).slice(0, 10) : undefined }))
       .filter((x) => x.label && x.value);
     if (!data.stats.length) throw new Error("stats が空です。");
+  } else if (kind === "map") {
+    data.places = (Array.isArray(a.places) ? a.places : [])
+      .slice(0, 8)
+      .map((x) => ({
+        name: String(x?.name ?? "").slice(0, 80),
+        query: String(x?.query || x?.address || x?.name || "").slice(0, 200),
+        note: x?.note ? String(x.note).slice(0, 200) : undefined,
+      }))
+      .filter((x) => x.name && x.query);
+    if (!data.places.length) throw new Error("places が空です。");
   } else if (kind === "text") {
     data.text = String(a.text ?? "").slice(0, 1000);
     if (!data.text) throw new Error("text が空です。");

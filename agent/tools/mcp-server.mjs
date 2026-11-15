@@ -37,16 +37,21 @@ export const TOOLS = [
       "文字だけより、写真・動画・図で見せることを優先する。" +
       "kind: list = 一覧（ニュースなど。items に title・url・note・image。image を省くと、url のページの見出し画像を自動で添える）" +
       " / video = 動画（YouTube の url。画面の中で再生できる）/ stats = 大事な数字（stats に label・value・unit。例: 日経平均 / 38,500 / 円）" +
+      " / map = 地図（places に name・query・note。query は Google マップで探す言葉＝施設名と市区町村、または住所。複数なら番号で切り替えられる）" +
       " / points = 要点や手順の図（points に短い文の配列。手順なら style: steps）/ page = ページ（url。見出し画像を自動で添える）/ image = 画像（画像そのものの url）/ text = 短い文（text）。" +
-      "文の中の大事な数字や言葉は **太字** で囲める。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
+      "場所・お店・施設・観光地の話では、list などと一緒に map も出す。文の中の大事な数字や言葉は **太字** で囲める。天気・日付・今日の予定のカードは画面が自分で出すので、出さなくてよい。",
     inputSchema: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["list", "video", "stats", "points", "page", "image", "text"] },
+        kind: { type: "string", enum: ["list", "map", "video", "stats", "points", "page", "image", "text"] },
         title: { type: "string", description: "カードの見出し（短く）" },
         items: {
           type: "array",
           items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" }, note: { type: "string" }, image: { type: "string", description: "写真の URL（省くとページから探す）" } } },
+        },
+        places: {
+          type: "array",
+          items: { type: "object", properties: { name: { type: "string" }, query: { type: "string", description: "例: 砂川公園 岡山県総社市" }, note: { type: "string" } } },
         },
         stats: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" }, unit: { type: "string" } } } },
         points: { type: "array", items: { type: "string" } },
