@@ -38,3 +38,26 @@ export function openPalette(n: number, screen?: ScreenInfo) {
     : "popup=yes,width=1280,height=800";
   return window.open(`/palette?n=${n}`, `dimy-palette-${n}`, f) !== null;
 }
+
+/**
+ * モニターに、並び方から分かる名前を付ける（例: 左・中央・右・中央の上）。番号では分かりにくいため。
+ * 横: 全体の幅を 3 つに分けて、モニターの中心がどこにあるか。縦: メインのモニターと同じ段か、その上・下か。
+ * 同じ名前になったときは、番号を添えて見分ける。
+ */
+export function describeScreens(screens: Pick<ScreenInfo, "availLeft" | "availTop" | "availWidth" | "availHeight" | "isPrimary">[]): string[] {
+  if (!screens.length) return [];
+  const minX = Math.min(...screens.map((s) => s.availLeft));
+  const maxX = Math.max(...screens.map((s) => s.availLeft + s.availWidth));
+  const main = screens.find((s) => s.isPrimary) ?? screens[0];
+  const names = screens.map((s) => {
+    const cx = s.availLeft + s.availWidth / 2;
+    const cy = s.availTop + s.availHeight / 2;
+    const r = (cx - minX) / Math.max(1, maxX - minX);
+    const h = screens.length === 1 ? "" : r < 1 / 3 ? "左" : r > 2 / 3 ? "右" : "中央";
+    const v = cy < main.availTop ? "上" : cy > main.availTop + main.availHeight ? "下" : "";
+    if (!h && !v) return "このモニター";
+    if (!v) return h;
+    return h ? `${h}の${v}` : v;
+  });
+  return names.map((n, i) => (names.filter((x) => x === n).length > 1 ? `${n}（${i + 1}）` : n));
+}

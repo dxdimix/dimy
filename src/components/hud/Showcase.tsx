@@ -11,7 +11,7 @@
 //   画面の中の好きな場所に置け、右下の角で大きさを変えられる（利用者の決まり）
 // - カードは、周りのボタンや表記（右上のボタン・左のアイコン・日時・天気・SYSTEM・LOG・字幕・マイク）より後ろに出す
 
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
 import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
@@ -36,6 +36,8 @@ type Props = {
   onUpdate: (id: string, patch: Partial<Card>) => void;
   /** カードを画面（ブラウザのウィンドウ）の外で離した: そこにあるパレットへ移す。移せたら true */
   onDropOut: (card: Card, screenX: number, screenY: number, grab: { x: number; y: number }) => Promise<boolean>;
+  /** 動作の記録（管理の「動作」に残す） */
+  onLog: (text: string) => void;
   weather: Weather | null;
   place: Place | null;
   session: Session;
@@ -103,15 +105,17 @@ export function Showcase(p: Props) {
     };
   }, [onExtract]);
   // 帯をつかんで動かす・右下の角で大きさを変える（列のカードは、動かし始めたら好きな場所のカードになる）
-  const { onUpdate, onDropOut } = p;
+  const { onUpdate, onDropOut, onLog } = p;
   const [moving, setMoving] = useState(false);
+  // 指の動きを受け取り続けるための、いつもある小さな板（固定ウィンドウと同じやり方。ウィンドウの外へ出ても届く）
+  const captureRef = useRef<HTMLDivElement>(null);
   const startDrag = (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => {
     if (e.button !== 0 || (mode === "move" && (e.target as HTMLElement).closest("button"))) return;
     e.preventDefault();
     const el = (e.currentTarget as HTMLElement).closest("[data-card-id]") as HTMLElement | null;
     // ウィンドウの外へ出ても指の動きを受け取り続ける（パレットへ移すため）
     try {
-      document.documentElement.setPointerCapture(e.pointerId);
+      captureRef.current?.setPointerCapture(e.pointerId);
     } catch {
       /* 受け取れなくても、ウィンドウの中では動かせる */
     }
@@ -122,7 +126,13 @@ export function Showcase(p: Props) {
     const sy = e.clientY;
     const startH = card.float?.h ?? r.height;
     let begun = false;
+    let wentOut = false;
+    const isOut = (ev: PointerEvent) => ev.clientX < 0 || ev.clientY < 0 || ev.clientX > window.innerWidth || ev.clientY > window.innerHeight;
     const move = (ev: PointerEvent) => {
+      if (!wentOut && isOut(ev)) {
+        wentOut = true;
+        onLog(`カード「${card.title}」をウィンドウの外へ動かした（モニター上 ${ev.screenX}, ${ev.screenY}）`);
+      }
       const dx = ev.clientX - sx;
       const dy = ev.clientY - sy;
       if (!begun) {
@@ -140,7 +150,8 @@ export function Showcase(p: Props) {
       setMoving(false);
       if (!begun || mode !== "move") return;
       // ブラウザのウィンドウの外で離した: そのモニターのパレットへ移す（移せなければ、画面の端に残る）
-      const outside = ev.clientX < 0 || ev.clientY < 0 || ev.clientX > window.innerWidth || ev.clientY > window.innerHeight;
+      const outside = isOut(ev);
+      if (wentOut && !outside) onLog(`カード「${card.title}」はウィンドウの外へ出たが、中に戻って離した`);
       if (outside) void onDropOut({ ...card, float: card.float ?? { ...start } }, ev.screenX, ev.screenY, { x: sx - start.x, y: sy - start.y });
     };
     window.addEventListener("pointermove", move);
@@ -171,6 +182,7 @@ export function Showcase(p: Props) {
           <CardView card={c} side="right" {...p} onGrab={startDrag} floating />
         </div>
       ))}
+      <div ref={captureRef} className="pointer-events-none fixed left-0 top-0 h-px w-px" aria-hidden />
       {/* 動かしている間は、地図や動画（iframe）に指の動きを取られないよう、透明な板をかぶせる */}
       {moving && <div className="fixed inset-0 z-[990] cursor-grabbing" />}
       {narrow ? (

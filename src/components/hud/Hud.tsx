@@ -360,12 +360,16 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   async function dropCardOut(card: Card, screenX: number, screenY: number, grab: { x: number; y: number }) {
     const f = card.float ?? { x: 0, y: 0, w: 520 };
     const pin: Pin = { id: newPinId(), kind: "card", card: { ...card, float: undefined, pinned: true }, title: card.title, x: 0, y: 0, w: Math.round(f.w), h: Math.round(f.h ?? 560), z: 10 };
-    let ok = pins.dropTo(pin, screenX, screenY, grab);
-    if (!ok) ok = await pins.dropToNewPalette(pin, screenX, screenY, grab);
-    if (ok) {
-      setCards((prev) => prev.filter((c) => c.id !== card.id));
-      logActivity(supabase, "card", `カードをパレットへ移した: ${card.title}`);
-    }
+    const opened = pins.dropTo(pin, screenX, screenY, grab);
+    const ok = opened || (await pins.dropToNewPalette(pin, screenX, screenY, grab));
+    if (ok) setCards((prev) => prev.filter((c) => c.id !== card.id));
+    logActivity(
+      supabase,
+      ok ? "card" : "error",
+      ok
+        ? `カードをパレットへ移した: ${card.title}（${opened ? "開いていたパレット" : "新しく開いたパレット"}）`
+        : `カードをパレットへ移せなかった: ${card.title}（離した場所 ${screenX}, ${screenY}。近くに開いたパレットがなく、新しく開くこともできなかった）`,
+    );
     return ok;
   }
 
@@ -949,6 +953,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         onExtract={extractCard}
         onUpdate={(id, patch) => setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))}
         onDropOut={dropCardOut}
+        onLog={(t) => logActivity(supabase, "card", t)}
         weather={weather}
         place={place}
         session={session}
