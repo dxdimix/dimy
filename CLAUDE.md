@@ -76,6 +76,7 @@ PC の中に住む個人用 AI アシスタント。コンセプトは「いつ�
 - 返事は短く（要点を 1〜3 文）。詳しくは聞かれたら話す（人格 `agent/lib/prompt.mjs`）。
 - 返事の速さ（利用者の決まり。待ち時間を短く）: 調べるときは、調べる前に短い一言（「〇〇を調べますね。」）を書いてすぐ読み上げる → 調べ終えたらカードより先に答えの文章 → 最後に `show_card` を 1 回だけ（何枚かは `cards` にまとめる）。カードの写真はカードを出したあとに書き足す。2026-11-15 の計測では、調べものの返事は発言から完了まで約 18〜19 秒（Web 検索と、カードを先に書いていたのが主な理由）。
 - スマホのホーム画面に追加できる（`src/app/manifest.ts`、アイコンは `src/app/icon.svg` から作った PNG）。
+- 料金の安全（利用者の決まり: 誤って費用を出さない）: Claude Code に渡す環境変数から `ANTHROPIC_API_KEY`・`ANTHROPIC_AUTH_TOKEN` を外す（`safeEnv`。サブスクのログインだけで動かす）。起動時に、API キーが PC のどこにあるか（DIMY の環境変数・Windows の利用者 / PC 全体の環境変数・`~/.claude/settings*.json` の env と apiKeyHelper・`~/.claude.json` の API キーのログイン・DIMY と dev の各アプリの .env / .env.local）を調べ、場所だけを記録に残す（`agent/lib/apikey-check.mjs`。中身は読まない）。Claude Code の起動の知らせの `apiKeySource` も記録する（"none" ならサブスクの枠）。
 - Claude API は使わない（利用者の希望：費用をかけない）。claude.ai などのブラウザ画面の自動操作もしない（規約違反）。
 
 ## 開発用フォルダ（利用者の決まり）

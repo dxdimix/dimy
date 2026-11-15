@@ -5,6 +5,7 @@
 //
 // 起動: npm run agent（.env.local の SUPABASE_URL / SUPABASE_SECRET_KEY を使う）
 
+import { findApiKeyPlaces } from "./lib/apikey-check.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -487,6 +488,23 @@ ensureDesktopShortcuts({ root: ROOT, log });
 
 // 最初の発言を待たずに Claude Code を起動しておく（1 回目の返事も速くするため）。
 log(`Claude Code の場所: ${CLAUDE_BIN}`);
+// 料金の安全確認: Anthropic の API キーが PC のどこかにないか（場所だけ記録する。中身は読まない）
+try {
+  const envFiles = [path.join(ROOT, ".env.local"), path.join(ROOT, ".env")];
+  if (DEV_DIR && fs.existsSync(DEV_DIR)) {
+    for (const d of fs.readdirSync(DEV_DIR, { withFileTypes: true })) {
+      if (d.isDirectory()) for (const f of [".env", ".env.local"]) envFiles.push(path.join(DEV_DIR, d.name, f));
+    }
+  }
+  const places = findApiKeyPlaces({ extraEnvFiles: envFiles });
+  log(
+    places.length
+      ? `API キーの確認: 次の場所に Anthropic の API キーの設定があります（DIMY は使わないように外しています）: ${places.join(" / ")}`
+      : "API キーの確認: Anthropic の API キーの設定は見つかりませんでした（サブスクの枠だけで動きます）",
+  );
+} catch (e) {
+  log(`API キーの確認ができませんでした: ${e instanceof Error ? e.message : String(e)}`);
+}
 claude.start();
 
 function shutdown() {

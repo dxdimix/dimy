@@ -11,10 +11,12 @@ import { spawn } from "node:child_process";
  */
 export function safeEnv(env) {
   return Object.fromEntries(
-    // Claude Code 自身のログインに使うもの（ANTHROPIC_ / CLAUDE_ で始まる）は残す。
-    Object.entries(env).filter(
-      ([k]) => /^(ANTHROPIC_|CLAUDE_)/.test(k) || !/KEY|SECRET|TOKEN|PASSWORD|JARVIS_APP_|DIMY_APP_|SUPABASE/i.test(k),
-    ),
+    Object.entries(env).filter(([k]) => {
+      // API キーは渡さない。渡すと、サブスクの枠ではなく API の料金がかかる動き方になることがある（利用者の決まり: 費用をかけない）
+      if (k === "ANTHROPIC_API_KEY" || k === "ANTHROPIC_AUTH_TOKEN") return false;
+      // Claude Code 自身のログインに使うもの（CLAUDE_CODE_OAUTH_TOKEN など、ANTHROPIC_ / CLAUDE_ で始まる）は残す。
+      return /^(ANTHROPIC_|CLAUDE_)/.test(k) || !/KEY|SECRET|TOKEN|PASSWORD|JARVIS_APP_|DIMY_APP_|SUPABASE/i.test(k);
+    }),
   );
 }
 
