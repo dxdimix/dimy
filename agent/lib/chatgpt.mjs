@@ -8,5 +8,6 @@ export function chatgptUrl(question) {
     .replace(/\n*\[DIMY への合図\][\s\S]*$/, "")
     .trim()
     .slice(0, 2000);
-  return `https://chatgpt.com/?q=${encodeURIComponent(q)}`;
+  // dimy=1: ディミの中の枠で、拡張機能が送信ボタンを 1 回押す印（extension/chatgpt.js）
+  return `https://chatgpt.com/?q=${encodeURIComponent(q)}&dimy=1`;
 }
