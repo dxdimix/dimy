@@ -3,6 +3,11 @@
 // 使い方:
 //   node scripts/maint.mjs read <messages|agent_logs|activity_log|pc_commands|pc_state> [件数]
 //   node scripts/maint.mjs restart        … PC の DIMY に「再起動して最新にして」と頼み、結果を待つ
+//   node scripts/maint.mjs read notes      … 覚えていること（使っていないものも。id 付き）
+//   node scripts/maint.mjs read feedback   … 返事への評価（GOOD / BAD と、その返事・発言）
+//   node scripts/maint.mjs note-add <style|fact|rule> <中身>
+//   node scripts/maint.mjs note-edit <id> <中身> [style|fact|rule]
+//   node scripts/maint.mjs note-off <id> / note-on <id>   … 使わないようにする / 戻す（消さない）
 // 必要な環境変数（秘密ではない）: DIMY_MAINT_URL（Supabase の URL）、DIMY_MAINT_ANON（publishable キー）
 // 合言葉（dimy-maint-key）は、この環境の通信の仕組み（ネットワークの秘密の保存）が自動で付ける。ここには書かない。
 
@@ -37,10 +42,20 @@ try {
       if (what === "messages") console.log(`[${time(r.created_at)}] ${r.role === "user" ? "あなた" : "DIMY"}（${r.status}）${r.error ? ` エラー: ${r.error}` : ""}\n  ${String(r.content).replace(/\n/g, "\n  ")}`);
       else if (what === "agent_logs") console.log(`[${time(r.created_at)}] ${r.level === "error" ? "エラー " : ""}${r.message}`);
       else if (what === "activity_log") console.log(`[${time(r.created_at)}] ${r.kind}: ${r.detail}（${r.device}）`);
+      else if (what === "notes") console.log(`${r.active ? "◯" : "×（使っていない）"} [${r.kind}] ${r.content}\n    id=${r.id}  ${r.source === "kymis" ? "DIMY が書いた" : "利用者"}・${time(r.updated_at)}`);
+      else if (what === "feedback") console.log(`[${time(r.created_at)}] ${r.rating > 0 ? "GOOD" : "BAD"}${r.comment ? `（${r.comment}）` : ""}\n  発言: ${r.question ?? ""}\n  返事: ${String(r.reply).replace(/\n/g, " ")}`);
       else if (what === "pc_commands") console.log(`[${time(r.created_at)}] ${r.kind} ${JSON.stringify(r.payload)} → ${r.status}${r.result ? `: ${r.result}` : ""}`);
       else console.log(JSON.stringify(r, null, 2));
     }
     if (!rows.length) console.log("（記録はありません）");
+  } else if (cmd === "note-add") {
+    const [, kind, ...rest] = process.argv.slice(2);
+    console.log(`足しました: ${await rpc("dimy_maint_note", { p_action: "add", p_kind: kind, p_content: rest.join(" ") })}`);
+  } else if (cmd === "note-edit") {
+    const [, id, content, kind] = process.argv.slice(2);
+    console.log(`直しました: ${await rpc("dimy_maint_note", { p_action: "update", p_id: id, p_content: content, p_kind: kind ?? null })}`);
+  } else if (cmd === "note-off" || cmd === "note-on") {
+    console.log(`${cmd === "note-off" ? "使わないようにしました" : "戻しました"}: ${await rpc("dimy_maint_note", { p_action: cmd === "note-off" ? "off" : "on", p_id: what })}`);
   } else if (cmd === "restart") {
     const id = await rpc("dimy_maint_command", { p_kind: "restart" });
     console.log(`再起動を頼みました（${id}）。返事を待っています…`);

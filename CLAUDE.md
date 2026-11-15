@@ -96,6 +96,7 @@ PC の中に住む個人用 AI アシスタント。コンセプトは「いつ�
 - `supabase/migrations/20261115500000_maintenance.sql` の窓口で、クラウドの開発用セッションからも記録を読み、PC の DIMY に再起動（最新版の取り込み）を頼める。できるのは「読む」と「再起動を頼む」だけ。
 - 使い方: `npm run maint -- read messages 50`（会話）／`read agent_logs 100`（PC の DIMY の記録）／`read activity_log`（画面の動作）／`read pc_commands`（PC への命令）／`read pc_state`（Chrome のプロフィールなど）／`npm run maint -- restart`（再起動を頼んで結果を待つ）。
 - 必要なもの: 環境変数 `DIMY_MAINT_URL`（Supabase の URL）と `DIMY_MAINT_ANON`（publishable キー。秘密ではない）、合言葉（見出し `dimy-maint-key`。クラウドの環境の「ネットワークの秘密」に保存し、通信のときに自動で付く。リポジトリやチャットには書かない）。合言葉は SQL Editor で `select public.dimy_maint_new_key('メモ');` を実行して作る。無効にするときは `delete from public.maintenance_keys;`。
+- 「覚えていること」（`kymis_notes`）も直せる（`20261115700000_maintenance_notes.sql`）: `read notes`（id 付き。使っていないものも）／`read feedback`（GOOD / BAD と、その返事・発言）／`note-add <style|fact|rule> <中身>`／`note-edit <id> <中身> [種類]`／`note-off <id>`・`note-on <id>`（消さずに使わないようにする・戻す）。直すと PC の DIMY が次の発言で Claude Code を起動し直して反映する。返事の質に関わるので、利用者から返事の直し方を言われたら、評価と覚えていることを読んで、必要なら直す（直した内容は利用者に伝える）。
 - 利用者から DIMY の不具合を相談されたら、クラウドのセッションでも、まずこれで記録を読んでから答える。直して main に push したら `npm run maint -- restart` で PC の DIMY に最新版を取り込ませ、記録で直ったかを確かめる。
 
 ## DIMY の開発は PC の dev のセッションで行う（利用者の決まり）
