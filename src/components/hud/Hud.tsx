@@ -333,13 +333,14 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     [supabase],
   );
 
-  // 残す（ピン留めの）カードは、この端末に控える（画面を読み込み直しても、消すまで残す。利用者の決まり）
-  const pinnedKey = () => `device.${deviceId()}.pinnedCards`;
+  // 出ているカードは、この端末に控える。新しい版で画面を自動で読み込み直しても、そのまま戻す（利用者の決まり:
+  // 次の会話になるまでは全部残す。ピン留めのカードは消すまで残す）
+  const cardsKey = () => `device.${deviceId()}.cards`;
   const cardsLoaded = useRef(false);
   useEffect(() => {
     try {
-      const saved = JSON.parse(getPref(pinnedKey()) ?? "[]") as Card[];
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 開いたときに、残していたカードを戻す
+      const saved = JSON.parse(getPref(cardsKey()) ?? getPref(`device.${deviceId()}.pinnedCards`) ?? "[]") as Card[];
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 開いたときに、出ていたカードを戻す
       if (saved.length) setCards((prev) => [...saved.filter((c) => !prev.some((p) => p.id === c.id)), ...prev]);
     } catch {
       /* 読めなければ何もしない */
@@ -349,9 +350,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   useEffect(() => {
     if (!cardsLoaded.current) return;
     const t = setTimeout(() => {
-      const keep = cards.filter((c) => c.pinned && c.kind !== "talk");
-      const next = JSON.stringify(keep);
-      if (next !== (getPref(pinnedKey()) ?? "[]")) setPref(pinnedKey(), next);
+      const next = JSON.stringify(cards);
+      if (next !== (getPref(cardsKey()) ?? "[]")) setPref(cardsKey(), next);
     }, 800);
     return () => clearTimeout(t);
   }, [cards]);

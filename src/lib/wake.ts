@@ -36,6 +36,10 @@ export function parseControl(text: string): Control | null {
  */
 export function toSpeech(text: string): string {
   return text
+    // Web 検索のあとに付く出典（Sources: と、その下のリンク）は読まない
+    .replace(/\n*\s*(\*\*)?(Sources|出典|参考)(\*\*)?\s*[:：][\s\S]*$/i, "")
+    // [見出し](URL) は見出しだけ読む
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/https?:\/\/\S+/g, "")
     .replace(/\bDimiX\b/gi, "ディミックス")
     .replace(/競馬\s*Edge/gi, "けいばエッジ")

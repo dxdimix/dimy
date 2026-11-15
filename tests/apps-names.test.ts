@@ -17,3 +17,14 @@ describe("アプリのシステム名", () => {
     expect(toSpeech("競馬Edgeを開きます")).toBe("けいばエッジを開きます");
   });
 });
+
+describe("開く命令と、調べてほしい頼みの見分け", () => {
+  it("中身を調べる頼みは開かない", () => {
+    expect(detectOpenCommand("今日の株価が情報を教えてください 買い時のものが ピックアップされていたが かぶたろうね システムから引っ張ってきて 一覧で見せてください")).toBeNull();
+    expect(detectOpenCommand("かぶ太郎を開いて")?.id).toBe("kabu");
+  });
+  it("出典は読み上げない", () => {
+    expect(toSpeech("おすすめは nikko 倉敷店です。\n\nSources:\n- [セントラル（Yahoo!マップ）](https://map.yahoo.co.jp/x)")).toBe("おすすめは nikko 倉敷店です。");
+    expect(toSpeech("詳しくは[こちら](https://e.com)を見てください")).toBe("詳しくはこちらを見てください");
+  });
+});

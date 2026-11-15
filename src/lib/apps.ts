@@ -43,12 +43,15 @@ export function canEmbed(app: AppEntry, ownHost = "dimy.dxdimix.com"): boolean {
   return site(new URL(app.url).hostname) === site(ownHost);
 }
 
+const ASK_WORDS = /(教えて|おしえて|調べて|ピックアップ|一覧|まとめて|引っ張|ひっぱ|どう|どれ|何|なに|いくら|情報|分析|買い時|売り時|予想)/;
 const OPEN_WORDS = /(開いて|ひらいて|開けて|表示して|見せて|出して|起動して|開く|を表示)/;
 
 /** 「FX を開いて」のような言葉なら、そのアプリを返す。違えば null。 */
 export function detectOpenCommand(text: string): AppEntry | null {
   const t = text.toLowerCase().replace(/\s+/g, "");
   if (!OPEN_WORDS.test(t)) return null;
+  // 「かぶ太郎から引っ張ってきて一覧で見せて」のような、中身を調べてほしい頼みは開かない（PC の DIMY に任せる）
+  if (ASK_WORDS.test(t) || t.length > 30) return null;
   // 長い言い方から順に探す（「株式」と「株」など）
   const hits = APPS.flatMap((a) => a.words.map((w) => ({ a, w: w.toLowerCase() }))).sort((x, y) => y.w.length - x.w.length);
   return hits.find(({ w }) => t.includes(w))?.a ?? null;
