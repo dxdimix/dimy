@@ -91,8 +91,10 @@ function useNarrow() {
 
 // 球体（直径 min(62vmin, 640px)）の中心から、カードの内側の端までの距離。球体の縁に少しかかる
 const INNER = "min(22vmin, 230px)";
-// 字幕（下から 8rem、高さ最大 7.5rem + 余白）にかからない高さ
-const COLUMN_BASE: CSSProperties = { top: "6.5rem", maxHeight: "calc(100dvh - 6.5rem - 17.5rem)", width: `min(680px, calc(50% - ${INNER} - 80px))` };
+// 字幕（下から 8rem、高さ最大 7.5rem）の上の端のすぐ上まで使う（内側の列は字幕と横に少し重なるため）
+const COLUMN_BASE: CSSProperties = { top: "6.5rem", maxHeight: "calc(100dvh - 6.5rem - 16rem)", width: `min(680px, calc(50% - ${INNER} - 80px))` };
+// 外側の列（左右 2 列のとき）は、字幕とも下の入力欄とも重ならないので、右下の LOG の上まで使う
+const OUTER_MAX_HEIGHT = "calc(100dvh - 6.5rem - 12.5rem)";
 
 export function Showcase(p: Props) {
   const narrow = useNarrow();
@@ -218,8 +220,8 @@ export function Showcase(p: Props) {
       side === "top"
         ? { top: "11.75rem", left: 12, right: 12, maxHeight: "calc(100dvh - 11.75rem - 17rem)" }
         : side === "right"
-          ? { ...COLUMN_BASE, width: colW, left: `calc(50% + ${offset})` }
-          : { ...COLUMN_BASE, width: colW, right: `calc(50% + ${offset})` };
+          ? { ...COLUMN_BASE, width: colW, left: `calc(50% + ${offset})`, ...(j > 0 ? { maxHeight: OUTER_MAX_HEIGHT } : {}) }
+          : { ...COLUMN_BASE, width: colW, right: `calc(50% + ${offset})`, ...(j > 0 ? { maxHeight: OUTER_MAX_HEIGHT } : {}) };
     return (
       <div style={style} className="pointer-events-none absolute z-[700] flex flex-col gap-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:thin]">
         {list.map((c) => (
