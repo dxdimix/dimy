@@ -1,6 +1,6 @@
 // 画面のカード（返事の中身を目でも見せる）の形と、言葉から出すカードを決める決まり。
 
-export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk";
+export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
@@ -121,5 +121,13 @@ export type CardDrag = { from: string; kind: CardKind; title: string; data: Card
 
 /** 会話の控えに残す形（ピンの有無と、呼び出した会話のカードは残さない） */
 export function snapshotCards(cards: Card[]): Card[] {
-  return cards.filter((c) => c.kind !== "talk").map((c) => ({ ...c, pinned: false, float: undefined }));
+  return cards.filter((c) => c.kind !== "talk" && c.kind !== "chat").map((c) => ({ ...c, pinned: false, float: undefined }));
+}
+
+/** 会話のカード（文字入力と会話の履歴）。正面の真ん中に、字幕にかからない高さで出す。最初からピン留め */
+export function chatCard(vw: number, vh: number): Card {
+  const w = Math.min(640, vw - 16);
+  const top = vw < 768 ? 64 : 96;
+  const h = Math.max(320, vh - top - (vw < 768 ? 280 : 290));
+  return { id: "chat", kind: "chat", title: "会話", data: {}, pinned: true, at: Date.now() + 2e13, float: { x: Math.round((vw - w) / 2), y: top, w, h } };
 }

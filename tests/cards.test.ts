@@ -63,3 +63,15 @@ describe("左右の列と、好きな場所", () => {
     expect(clampFloat({ x: 100, y: 100, w: 100, h: 50 }, 1920, 1080)).toEqual({ x: 100, y: 100, w: 280, h: 160 });
   });
 });
+
+import { chatCard } from "../src/lib/cards";
+
+describe("会話のカード", () => {
+  it("正面の真ん中に、字幕にかからない高さで、ピン留めで出す", () => {
+    const c = chatCard(1920, 1080);
+    expect(c.pinned).toBe(true);
+    expect(c.float).toEqual({ x: 640, y: 96, w: 640, h: 694 });
+    expect(c.float!.y + c.float!.h!).toBeLessThan(1080 - 128 - 120 - 16); // 字幕の枠の上
+    expect(snapshotCards([c])).toEqual([]);
+  });
+});

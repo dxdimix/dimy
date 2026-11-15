@@ -7,7 +7,7 @@
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
 import { Showcase } from "./Showcase";
-import { BUILTIN_TITLE, builtinCardsFor, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
+import { BUILTIN_TITLE, builtinCardsFor, chatCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -356,8 +356,24 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     return () => clearTimeout(t);
   }, [cards]);
 
+  /** 会話（文字入力と会話の履歴）のカードを開く・閉じる。正面に、最初からピン留めで出す（利用者の決まり） */
+  const chatOpen = cards.some((c) => c.kind === "chat");
+  function toggleChat(open = !chatOpen) {
+    setCards((prev) => {
+      const has = prev.some((c) => c.kind === "chat");
+      if (open && !has) return [...prev, chatCard(window.innerWidth, window.innerHeight)];
+      if (!open && has) return prev.filter((c) => c.kind !== "chat");
+      return prev;
+    });
+    logActivity(supabase, "ui", open ? "会話のカードを開いた" : "会話のカードを閉じた");
+  }
+
   /** カードをブラウザのウィンドウの外で離したとき: そのモニターのパレットへ、固定ウィンドウとして移す */
   async function dropCardOut(card: Card, screenX: number, screenY: number, grab: { x: number; y: number }) {
+    if (card.kind === "chat") {
+      logActivity(supabase, "card", "会話のカードはパレットへ移せない（メイン画面だけで使える）");
+      return false;
+    }
     const f = card.float ?? { x: 0, y: 0, w: 520 };
     const pin: Pin = { id: newPinId(), kind: "card", card: { ...card, float: undefined, pinned: true }, title: card.title, x: 0, y: 0, w: Math.round(f.w), h: Math.round(f.h ?? 560), z: 10 };
     const opened = pins.dropTo(pin, screenX, screenY, grab);
@@ -954,6 +970,18 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         onUpdate={(id, patch) => setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))}
         onDropOut={dropCardOut}
         onLog={(t) => logActivity(supabase, "card", t)}
+        renderChat={() => (
+          <Chat
+            supabase={supabase}
+            session={session}
+            embedded
+            onRecall={(id) => void recall(id)}
+            onLocalCommand={async (t) => {
+              logActivity(supabase, "voice", `（文字）${t}`);
+              return handleLocal(t);
+            }}
+          />
+        )}
         weather={weather}
         place={place}
         session={session}
@@ -999,7 +1027,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
 
       {/* 右上：アイコン */}
       <nav className="absolute right-5 top-5 z-[800] flex gap-2">
-        <button onClick={() => setPanel(panel === "chat" ? "none" : "chat")} className={iconBtn} title="会話の履歴と文字入力" aria-label="会話の履歴と文字入力">
+        <button onClick={() => toggleChat()} className={iconBtn} title="会話の履歴と文字入力" aria-label="会話の履歴と文字入力">
           <ChatIcon className="h-5 w-5" />
         </button>
         <button
@@ -1098,7 +1126,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
             {recognition.listening ? <SendGlyph /> : <MicIcon className="h-7 w-7" />}
           </button>
         ) : (
-          <button onClick={() => setPanel("chat")} className={iconBtn} aria-label="文字で話しかける" title="このブラウザは音声入力に対応していません。文字で話しかけてください">
+          <button onClick={() => toggleChat(true)} className={iconBtn} aria-label="文字で話しかける" title="このブラウザは音声入力に対応していません。文字で話しかけてください">
             <ChatIcon className="h-5 w-5" />
           </button>
         )}
@@ -1265,31 +1293,6 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       <AppWindows state={appWins} />
 
       {/* 会話の履歴と文字入力（右から出るパネル） */}
-      <aside
-        className={
-          "absolute inset-y-0 right-0 z-10 flex w-[440px] max-w-full flex-col border-l border-cyan-400/25 bg-slate-950/95 backdrop-blur transition-transform duration-300 " +
-          (panel === "chat" ? "translate-x-0" : "translate-x-full")
-        }
-        aria-hidden={panel !== "chat"}
-      >
-        <div className="flex justify-end px-4 pt-4">
-          <button onClick={() => setPanel("none")} aria-label="閉じる" className="text-cyan-400 hover:text-cyan-100">
-            <CloseIcon className="h-6 w-6" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1">{panel === "chat" && (
-            <Chat
-              supabase={supabase}
-              session={session}
-              embedded
-              onRecall={(id) => void recall(id)}
-              onLocalCommand={async (t) => {
-                logActivity(supabase, "voice", `（文字）${t}`);
-                return handleLocal(t);
-              }}
-            />
-          )}</div>
-      </aside>
     </div>
   );
 }

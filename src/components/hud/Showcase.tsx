@@ -11,7 +11,7 @@
 //   画面の中の好きな場所に置け、右下の角で大きさを変えられる（利用者の決まり）
 // - カードは、周りのボタンや表記（右上のボタン・左のアイコン・日時・天気・SYSTEM・LOG・字幕・マイク）より後ろに出す
 
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
 import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
@@ -38,6 +38,8 @@ type Props = {
   onDropOut: (card: Card, screenX: number, screenY: number, grab: { x: number; y: number }) => Promise<boolean>;
   /** 動作の記録（管理の「動作」に残す） */
   onLog: (text: string) => void;
+  /** 会話のカードの中身（文字入力と会話の履歴） */
+  renderChat: () => ReactNode;
   weather: Weather | null;
   place: Place | null;
   session: Session;
@@ -253,12 +255,13 @@ function CardView({
   onOpenPage,
   onUpdate,
   onGrab,
+  renderChat,
   floating = false,
   weather,
   place,
   session,
 }: Props & { card: Card; side: "left" | "right"; onGrab: (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => void; floating?: boolean }) {
-  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY" }[card.kind];
+  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT" }[card.kind];
   return (
     <div
       data-card-id={card.id}
@@ -284,9 +287,13 @@ function CardView({
           <CloseIcon className="h-6 w-6" />
         </button>
       </div>
+      {card.kind === "chat" ? (
+        <div className="-mx-4 -mb-4 min-h-0 flex-1 overflow-hidden text-base">{renderChat()}</div>
+      ) : (
       <div className={floating ? "-mr-2 min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin]" : ""}>
         <CardBody card={card} onOpenLink={onOpenLink} onOpenPage={onOpenPage} weather={weather} place={place} session={session} />
       </div>
+      )}
       {floating && (
         <div
           onPointerDown={(e) => onGrab(card, e, "resize")}
@@ -323,6 +330,7 @@ export function CardBody({
       {card.kind === "weather" && <WeatherCard weather={weather} place={place} />}
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}
+      {card.kind === "chat" && <p className="text-base text-slate-400">会話は、メイン画面の会話のカードで使えます。</p>}
       {card.kind === "talk" && (
         <div className="space-y-3">
           {card.data.at && <div className="font-mono text-sm text-cyan-300/80">{new Date(card.data.at).toLocaleString("ja-JP", { timeZone: TZ, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>}
