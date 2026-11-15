@@ -179,6 +179,14 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [fullscreen, setFullscreen] = useState(false);
   const [speakOn, setSpeakOn] = useState(true);
   const [wakeOn, setWakeOn] = useState(false);
+  // スマホ（iPhone・Android など）では、呼びかけ（いつも聞いている状態）を使わない。
+  // iPhone の Safari は、ページを開くたびにマイクの許可を求めるので、開いただけでマイクを使うと毎回許可を聞かれる（利用者の指摘）。
+  // スマホはマイクのボタンを押したときだけマイクを使う。呼びかけの設定（どの端末でも共通）は、デスクトップ・ノートで効く
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 開いたときに、端末の種類を一度だけ調べる
+    setIsPhone(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
+  }, []);
   const [followSec, setFollowSec] = useState(0);
   const [silenceSec, setSilenceSec] = useState(1.5);
   const [hotkeyOn, setHotkeyOn] = useState(true);
@@ -570,7 +578,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       (m.role === "assistant" && m.status === "processing"),
   );
   const wake = useWakeWord({
-    enabled: wakeOn && isLeader,
+    enabled: wakeOn && isLeader && !isPhone,
     speaking: speaker.speaking || replyActive,
     paused: recognition.listening,
     isEcho: (t) => recentSpoken.current.some((x) => Date.now() - x.at < 60_000 && isEcho(t, x.text)),
@@ -627,7 +635,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       if (final) {
         liveIds.current.delete(m.id);
         // 呼びかけを待つ設定なら、言い終えたあと 8 秒は続けて話せるようにする
-        if (wakeOn) {
+        if (wakeOn && !isPhone) {
           if (speakOn) followUpAfterSpeech.current = true;
           else wakeRef.current?.followUp();
         }
@@ -635,7 +643,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         setCaptionUntil(Date.now() + captionSec * 1000);
       }
     }
-  }, [messages, speak, speakOn, wakeOn, captionSec, leaderRef]);
+  }, [messages, speak, speakOn, wakeOn, isPhone, captionSec, leaderRef]);
 
   // 画面を消さない（ずっと表示しておくため）。対応していないブラウザでは何もしない。
   useEffect(() => {
@@ -786,7 +794,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     const names = accountNamesRef.current;
     const done = () => {
       // 呼びかけで話しかけていたら、言い終えたあと続けて話せるようにする
-      if (wakeOn) {
+      if (wakeOn && !isPhone) {
         if (speakOn) followUpAfterSpeech.current = true;
         else wakeRef.current?.followUp();
       }
@@ -917,7 +925,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   function onMic() {
     cancelSpeech();
     // 呼びかけを待つ設定なら、「ディミ」と言わずにすぐ話せる状態にする
-    if (wakeOn) return wakeListening ? wake.finish() : wake.startCommand();
+    if (wakeOn && !isPhone) return wakeListening ? wake.finish() : wake.startCommand();
     if (recognition.listening) return recognition.stop();
     recognition.start();
   }
@@ -1038,7 +1046,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       {/* 中央：球体とリング */}
       <div className="pointer-events-none absolute inset-0 grid place-items-center">
         <div className="aspect-square w-[min(62vmin,640px)]">
-          <Ring mode={mode} tone={tone} waiting={wakeOn && isLeader && wake.state === "standby"} />
+          <Ring mode={mode} tone={tone} waiting={wakeOn && isLeader && !isPhone && wake.state === "standby"} />
         </div>
       </div>
 
@@ -1303,7 +1311,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           }}
           wakeSupported={wake.supported}
           wakeStatus={
-            !wakeOn
+            isPhone
+              ? "スマホでは使いません（マイクのボタンで話してください。開くたびにマイクの許可を聞かれないようにするため）"
+              : !wakeOn
               ? "オフ"
               : !isLeader
                 ? "ほかの画面が担当しています（この画面をクリックすると、この画面が聞きます）"
