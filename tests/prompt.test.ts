@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildFirstTurn, formatTurn } from "../agent/lib/prompt.mjs";
+import { buildFirstTurn, formatTurn, TURN_HINT } from "../agent/lib/prompt.mjs";
 
 const now = new Date("2026-11-10T03:00:00Z");
 
 describe("formatTurn", () => {
   it("発言の先頭に日本時間の現在日時を付ける", () => {
-    expect(formatTurn("こんにちは", now)).toBe("[現在日時: 2026/11/10 12:00:00]\nこんにちは");
+    expect(formatTurn("こんにちは", now)).toBe(`[現在日時: 2026/11/10 12:00:00]\nこんにちは\n\n${TURN_HINT}`);
   });
 });
 
