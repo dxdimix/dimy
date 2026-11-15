@@ -70,3 +70,11 @@ export function findApiKeyPlaces(o = {}) {
   }
   return places;
 }
+
+/**
+ * DIMY の Claude Code が API の料金で動いてしまう設定（場所の名前）。なければ空。
+ * 環境変数の API キーは DIMY が外して渡すので含めない。Claude Code 自身の設定とログインだけを見る。
+ */
+export function claudeCodeBillingPlaces(o = {}) {
+  return findApiKeyPlaces({ ...o, env: {}, reg: () => false, extraEnvFiles: [] });
+}

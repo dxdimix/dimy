@@ -27,3 +27,15 @@ describe("API キーの確認", () => {
     expect(e).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: "c", PATH: "/bin" });
   });
 });
+
+import { claudeCodeBillingPlaces } from "../agent/lib/apikey-check.mjs";
+
+describe("DIMY の Claude Code の料金の確認", () => {
+  it("API キーでログインした記録があれば止める対象。環境変数は見ない（DIMY が外すため）", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "dimy-"));
+    fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ primaryApiKey: "sk-ant-x", oauthAccount: {} }));
+    expect(claudeCodeBillingPlaces({ home })).toHaveLength(1);
+    fs.writeFileSync(path.join(home, ".claude.json"), JSON.stringify({ oauthAccount: {} }));
+    expect(claudeCodeBillingPlaces({ home })).toEqual([]);
+  });
+});

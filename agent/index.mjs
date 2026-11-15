@@ -5,7 +5,7 @@
 //
 // 起動: npm run agent（.env.local の SUPABASE_URL / SUPABASE_SECRET_KEY を使う）
 
-import { findApiKeyPlaces } from "./lib/apikey-check.mjs";
+import { claudeCodeBillingPlaces, findApiKeyPlaces } from "./lib/apikey-check.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -320,6 +320,17 @@ async function handle(message) {
       if (error) throw error;
       memoryChanged = false;
       prompt = buildFirstTurn(history.reverse(), content, { memory: await loadMemory(claimed.user_id) });
+    }
+
+    // 料金の安全: Claude Code が API キーで動く設定なら、Claude に送らずに止める（利用者の決まり: 誤って費用を出さない）。
+    // 調べるのは PC の設定ファイルだけなので、ここでは料金はかからない。DIMY_ALLOW_API_BILLING=1 で止めないようにできる
+    if (process.env.DIMY_ALLOW_API_BILLING !== "1") {
+      const risky = claudeCodeBillingPlaces();
+      if (risky.length) {
+        throw new Error(
+          `Claude Code が API キー（使った分だけ料金がかかる）でログインしているので、返事を止めました。PC で Claude Code を開き、/logout のあと /login で「Claude account with subscription」を選んでログインし直してください（${risky.join(" / ")}）`,
+        );
+      }
     }
 
     let firstAt = 0;
