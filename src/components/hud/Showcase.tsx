@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
-import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed } from "@/lib/cards";
+import { CARD_DRAG_TYPE, clampFloat, emphasize, splitColumns, mapEmbedUrl, mapOpenUrl, youtubeEmbed, youtubeId } from "@/lib/cards";
 import { fetchForecast, fetchJma, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 import { getPref } from "@/lib/prefs";
@@ -191,7 +191,8 @@ export function Showcase(p: Props) {
     captureRef.current?.addEventListener("lostpointercapture", lost);
   };
   if (!p.cards.length) return null;
-  const floats = p.cards.filter((c) => c.float).sort((a, b) => a.at - b.at);
+  // スマホでは、会話のカードだけを大きく出し、ほかは小さなカードの一覧にする（押すとページ・地図のアプリを開く。利用者の決まり）
+  const floats = p.cards.filter((c) => c.float && (!narrow || c.kind === "chat")).sort((a, b) => a.at - b.at);
   const column = (list: Card[], side: "left" | "right" | "top") => {
     const style: CSSProperties =
       side === "top"
@@ -224,7 +225,7 @@ export function Showcase(p: Props) {
         </div>
       )}
       {narrow ? (
-        column(p.cards.filter((c) => !c.float), "top")
+        <CompactList {...p} cards={p.cards.filter((c) => c.kind !== "chat")} />
       ) : (
         <>
           {column(splitColumns(p.cards).right, "right")}
@@ -242,6 +243,151 @@ export function Showcase(p: Props) {
         カードをすべて閉じる（{p.cards.length}）
       </button>
     </>
+  );
+}
+
+/** スマホの小さなカードの一覧。カードは入口（見出しと要点だけ）にして、押すとページ・地図のアプリ・動画のアプリを開く */
+function CompactList(p: Props & { cards: Card[] }) {
+  // 一覧と地図は、最初の 2 件だけを出し、残りは「ほか N 件」で開く（たくさんのカードを一度に見渡せるように）
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  if (!p.cards.length) return null;
+  const open = (url: string, title: string) => p.onOpenChrome(url, title);
+  return (
+    <div
+      // 上の段の下から、マイクのすぐ上まで使う（スマホは高さが少ないため。字幕は話している間だけ、この上に重なって出る）
+      style={{ top: "11.75rem", left: 12, right: 12, maxHeight: "calc(100dvh - 11.75rem - 7.5rem)" }}
+      className="absolute z-[700] flex flex-col gap-2 overflow-y-auto overscroll-contain pb-2"
+    >
+      {p.cards.map((card) => (
+        <div key={card.id} className={"rounded-lg border bg-slate-950/90 px-3 py-2 backdrop-blur " + (card.pinned ? "border-cyan-300/70" : "border-cyan-400/30")}>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-cyan-50">{card.title}</span>
+            <button onClick={() => p.onPin(card.id)} aria-label={card.pinned ? "残すのをやめる" : "残す"} className={"p-1 " + (card.pinned ? "text-cyan-100" : "text-cyan-400/60")}>
+              <PinIcon className="h-4 w-4" />
+            </button>
+            <button onClick={() => p.onClose(card.id)} aria-label="閉じる" className="p-1 text-cyan-400/70">
+              <CloseIcon className="h-5 w-5" />
+            </button>
+          </div>
+          <CompactBody card={card} open={open} weather={p.weather} session={p.session} all={opened.has(card.id)} />
+          {!opened.has(card.id) && (card.data.items?.length ?? card.data.places?.length ?? 0) > 2 && (
+            <button onClick={() => setOpened((s) => new Set(s).add(card.id))} className="mt-1 w-full rounded py-1 text-xs text-cyan-300 active:bg-cyan-400/10">
+              ほか {(card.data.items?.length ?? card.data.places?.length ?? 0) - 2} 件を見る
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 押せる 1 行（小さな画像・見出し・ひとこと） */
+function Row({ onClick, img, icon, title, note }: { onClick: () => void; img?: string; icon?: React.ReactNode; title: string; note?: string }) {
+  return (
+    <button onClick={onClick} className="flex w-full items-center gap-2.5 rounded-md py-1.5 text-left active:bg-cyan-400/10">
+      {img ? (
+        <Photo src={img} alt={title} className="h-11 w-16 shrink-0 rounded" />
+      ) : (
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded bg-cyan-400/10 text-cyan-300">{icon ?? <ExternalIcon className="h-4 w-4" />}</span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 text-sm font-semibold leading-snug text-cyan-50">{title}</span>
+        {note && <span className="line-clamp-1 text-xs text-slate-400">{note}</span>}
+      </span>
+      <ExternalIcon className="h-4 w-4 shrink-0 text-cyan-400/60" />
+    </button>
+  );
+}
+
+function CompactBody({ card, open, weather, session, all }: { card: Card; open: (url: string, title: string) => void; weather: Weather | null; session: Session; all: boolean }) {
+  const d = card.data;
+  const cut = <T,>(xs: T[] | undefined) => (all ? xs : xs?.slice(0, 2));
+  const pinIcon = (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 21s-6-5.3-6-11a6 6 0 1 1 12 0c0 5.7-6 11-6 11z" />
+      <circle cx="12" cy="10" r="2.2" />
+    </svg>
+  );
+  switch (card.kind) {
+    case "list":
+      return <div className="divide-y divide-cyan-400/10">{cut(d.items)?.map((it, i) => <Row key={i} onClick={() => it.url && open(it.url, it.title)} img={it.image} title={it.title} note={it.note} />)}</div>;
+    case "map":
+      // 地図はアプリで開く（Google マップのリンク。iPhone ではアプリが入っていればアプリ、なければ Safari）
+      return <div className="divide-y divide-cyan-400/10">{cut(d.places)?.map((pl, i) => <Row key={i} onClick={() => open(mapOpenUrl(pl.query), pl.name)} icon={pinIcon} title={pl.name} note={pl.note ?? "地図のアプリで開く"} />)}</div>;
+    case "video": {
+      const id = d.url ? youtubeId(d.url) : null;
+      return d.url ? <Row onClick={() => open(d.url!, card.title)} img={id ? `https://i.ytimg.com/vi/${id}/mqdefault.jpg` : undefined} title={card.title} note="動画を開く" /> : null;
+    }
+    case "page":
+    case "web":
+      return d.url ? <Row onClick={() => open(d.url!, card.title)} img={d.image} title={card.title} note={d.note ?? host(d.url)} /> : null;
+    case "image":
+      return d.url ? <Row onClick={() => open(d.url!, card.title)} img={d.url} title={card.title} note="画像を開く" /> : null;
+    case "stats":
+      return (
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {d.stats?.map((st, i) => (
+            <span key={i} className="text-xs text-slate-300">
+              {st.label} <b className="font-mono text-base text-white">{st.value}</b>
+              {st.unit}
+            </span>
+          ))}
+        </div>
+      );
+    case "points":
+      return (
+        <ul className="space-y-0.5 text-xs leading-snug text-slate-200">
+          {d.points?.map((pt, i) => (
+            <li key={i}>
+              {i + 1}. <Emph text={pt} />
+            </li>
+          ))}
+        </ul>
+      );
+    case "text":
+      return (
+        <p className="line-clamp-4 text-xs leading-snug text-slate-200">
+          <Emph text={d.text ?? ""} />
+        </p>
+      );
+    case "talk":
+      return (
+        <p className="line-clamp-3 text-xs leading-snug text-slate-300">
+          <span className="text-cyan-300">あなた</span> {d.q}
+          <br />
+          <span className="text-cyan-300">DIMY</span> {d.a}
+        </p>
+      );
+    case "weather":
+      return weather ? (
+        <div className="flex items-center gap-3">
+          <WeatherArt code={weather.code} size={36} />
+          <span className="font-mono text-2xl font-bold text-white">{Math.round(weather.temperature)}°</span>
+          <span className="font-mono text-sm">
+            <b className="text-rose-300">{Math.round(weather.max)}°</b> / <b className="text-sky-300">{Math.round(weather.min)}°</b>
+            {weather.rain !== null && <span className="ml-2 text-sky-200">☂{weather.rain}%</span>}
+          </span>
+        </div>
+      ) : null;
+    case "date":
+      return <DateLine />;
+    case "schedule":
+      return (
+        <div style={{ zoom: 0.72 }}>
+          <ScheduleCard session={session} />
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function DateLine() {
+  const [now] = useState(() => new Date());
+  return (
+    <p className="font-mono text-lg text-white">
+      {now.toLocaleDateString("ja-JP", { timeZone: TZ, month: "numeric", day: "numeric", weekday: "long" })}
+    </p>
   );
 }
 

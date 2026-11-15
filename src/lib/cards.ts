@@ -148,3 +148,9 @@ export function webCard(url: string, title: string, vw: number, vh: number): Car
     float: { x: Math.round((vw - w) / 2), y: top, w, h },
   };
 }
+
+/** YouTube の動画の番号（YouTube でなければ null）。スマホの小さなカードで、見出しの画像を出すため */
+export function youtubeId(url: string): string | null {
+  const e = youtubeEmbed(url);
+  return e ? e.split("/").pop() ?? null : null;
+}
