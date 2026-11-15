@@ -109,6 +109,7 @@ export function Showcase(p: Props) {
   // 帯をつかんで動かす・右下の角で大きさを変える（列のカードは、動かし始めたら好きな場所のカードになる）
   const { onUpdate, onDropOut, onLog } = p;
   const [moving, setMoving] = useState(false);
+  const [outside, setOutside] = useState(false);
   // 指の動きを受け取り続けるための、いつもある小さな板（固定ウィンドウと同じやり方。ウィンドウの外へ出ても届く）
   const captureRef = useRef<HTMLDivElement>(null);
   const startDrag = (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => {
@@ -129,11 +130,18 @@ export function Showcase(p: Props) {
     const startH = card.float?.h ?? r.height;
     let begun = false;
     let wentOut = false;
+    let done = false;
+    // 最後に見えた指の位置（モニター上）と、そのときウィンドウの外だったか。
+    // 別のモニターで離したとき、離した位置が正しく届かないことがあるため、最後に見えた位置で決める
+    let last = { out: false, screenX: e.screenX, screenY: e.screenY };
+    let lastF = start as { x: number; y: number; w: number; h?: number };
     const isOut = (ev: PointerEvent) => ev.clientX < 0 || ev.clientY < 0 || ev.clientX > window.innerWidth || ev.clientY > window.innerHeight;
     const move = (ev: PointerEvent) => {
-      if (!wentOut && isOut(ev)) {
+      const out = isOut(ev);
+      last = { out, screenX: ev.screenX, screenY: ev.screenY };
+      if (!wentOut && out) {
         wentOut = true;
-        onLog(`カード「${card.title}」をウィンドウの外へ動かした（モニター上 ${ev.screenX}, ${ev.screenY}）`);
+        onLog(`カード「${card.title}」をウィンドウの外へ動かした（モニター上 ${Math.round(ev.screenX)}, ${Math.round(ev.screenY)}）`);
       }
       const dx = ev.clientX - sx;
       const dy = ev.clientY - sy;
@@ -144,20 +152,40 @@ export function Showcase(p: Props) {
       }
       const f =
         mode === "move" ? { ...start, x: start.x + dx, y: start.y + dy } : { ...start, w: start.w + dx, h: startH + dy };
-      onUpdate(card.id, { float: clampFloat(f, window.innerWidth, window.innerHeight), pinned: true, at: Date.now() + 1e13 });
+      // ウィンドウの外へ出ている間は、カードも指について画面の外へ出す（パレットへ持っていけることが目で分かるように）
+      lastF = mode === "move" && out ? { ...f, x: Math.round(f.x), y: Math.round(f.y) } : clampFloat(f, window.innerWidth, window.innerHeight);
+      setOutside(mode === "move" && out);
+      onUpdate(card.id, { float: lastF, pinned: true, at: Date.now() + 1e13 });
     };
-    const up = (ev: PointerEvent) => {
+    const finish = (ev: PointerEvent | null) => {
+      if (done) return;
+      done = true;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      captureRef.current?.removeEventListener("lostpointercapture", lost);
       setMoving(false);
+      setOutside(false);
       if (!begun || mode !== "move") return;
-      // ブラウザのウィンドウの外で離した: そのモニターのパレットへ移す（移せなければ、画面の端に残る）
-      const outside = isOut(ev);
-      if (wentOut && !outside) onLog(`カード「${card.title}」はウィンドウの外へ出たが、中に戻って離した`);
-      if (outside) void onDropOut({ ...card, float: card.float ?? { ...start } }, ev.screenX, ev.screenY, { x: sx - start.x, y: sy - start.y });
+      const outNow = ev ? isOut(ev) : false;
+      const outside = outNow || last.out;
+      if (!outside) {
+        if (wentOut) onLog(`カード「${card.title}」はウィンドウの外へ出たが、中に戻って離した`);
+        return;
+      }
+      const at = outNow && ev ? { x: ev.screenX, y: ev.screenY } : { x: last.screenX, y: last.screenY };
+      onLog(`カード「${card.title}」をウィンドウの外で離した（モニター上 ${Math.round(at.x)}, ${Math.round(at.y)}${outNow ? "" : "。最後に見えた位置で判断"}）`);
+      const back = clampFloat(lastF, window.innerWidth, window.innerHeight);
+      void onDropOut({ ...card, float: lastF }, at.x, at.y, { x: sx - start.x, y: sy - start.y }).then((ok) => {
+        // 移せなかったときは、画面の中へ戻す（見えなくならないように）
+        if (!ok) onUpdate(card.id, { float: back });
+      });
     };
+    const up = (ev: PointerEvent) => finish(ev);
+    // 指の受け取りが途中で切れたとき（別のウィンドウで離したなど）も、最後に見えた位置で終える
+    const lost = () => finish(null);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    captureRef.current?.addEventListener("lostpointercapture", lost);
   };
   if (!p.cards.length) return null;
   const floats = p.cards.filter((c) => c.float).sort((a, b) => a.at - b.at);
@@ -187,6 +215,11 @@ export function Showcase(p: Props) {
       <div ref={captureRef} className="pointer-events-none fixed left-0 top-0 h-px w-px" aria-hidden />
       {/* 動かしている間は、地図や動画（iframe）に指の動きを取られないよう、透明な板をかぶせる */}
       {moving && <div className="fixed inset-0 z-[990] cursor-grabbing" />}
+      {outside && (
+        <div className="pointer-events-none fixed inset-x-0 top-6 z-[995] mx-auto w-fit rounded-full border border-cyan-300/70 bg-slate-950/90 px-5 py-2 text-base text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.4)]">
+          離すと、そのモニターのパレットへ移します
+        </div>
+      )}
       {narrow ? (
         column(p.cards.filter((c) => !c.float), "top")
       ) : (
