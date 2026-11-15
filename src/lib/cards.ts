@@ -29,6 +29,8 @@ export type CardData = {
   url?: string;
   note?: string;
   text?: string;
+  /** 調べもののとき、同じ質問を ChatGPT に渡したカード（1 枚だけ。新しい調べもので入れ替える） */
+  chatgpt?: boolean;
 };
 export type Card = {
   id: string;

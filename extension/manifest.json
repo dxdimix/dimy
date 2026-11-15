@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "DIMY",
-  "version": "1.0.1",
-  "description": "ディミの画面の中で Web ページを開けるようにする（ディミの画面の中で開くときだけ、ページの「中に表示しないで」の印を外す）。ディミの画面の写真を撮る。",
+  "version": "1.1.0",
+  "description": "ディミの画面の中で Web ページを開けるようにする（ディミの画面の中で開くときだけ、ページの「中に表示しないで」の印を外す）。ディミの中の ChatGPT がログインした状態で使えるよう、ChatGPT のログイン情報だけ枠の中にも送る設定にする。ディミの画面の写真を撮る。",
   "minimum_chrome_version": "116",
   "permissions": [
     "declarativeNetRequest",
     "alarms",
     "tabs",
-    "scripting"
+    "scripting",
+    "cookies"
   ],
   "host_permissions": [
     "<all_urls>"

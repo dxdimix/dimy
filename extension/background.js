@@ -44,6 +44,7 @@ async function isDimyPc() {
 // 画面の写真: 頼んできたディミのタブがあるウィンドウの、見えている部分を撮る
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg?.type === "hello" && sender.tab?.id !== undefined && isDimy(sender.tab.url)) {
+    relaxChatgptCookies();
     Promise.all([allowFramesIn(sender.tab.id).catch(() => {}), isDimyPc()])
       .then(([, pc]) => reply({ ok: true, pc }))
       .catch((e) => reply({ ok: false, error: String(e?.message || e) }));
@@ -88,3 +89,39 @@ chrome.runtime.onInstalled.addListener(async () => {
     chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["content.js"] }).catch(() => {});
   }
 });
+
+// ChatGPT（chatgpt.com）を、ディミの中のカードでもログインした状態で使えるようにする（利用者が選んだ: 安全性は少し下がる）。
+// Chrome は、ほかのサイトの枠の中には SameSite=Lax / Strict のログイン情報（Cookie）を送らない。
+// そこで chatgpt.com の Cookie だけ SameSite=None（どこからでも送る）に書き換える。ChatGPT が書き戻したら、また書き換える。
+// ほかのサイトの Cookie には触れない。中身（値）は読み取って同じものを書き直すだけで、どこにも送らない。
+const CHATGPT = /(^|\.)chatgpt\.com$/;
+async function relaxCookie(c) {
+  if (!CHATGPT.test(c.domain.replace(/^\./, "")) || c.sameSite === "no_restriction") return;
+  const host = c.domain.replace(/^\./, "");
+  const details = {
+    url: `https://${host}${c.path || "/"}`,
+    name: c.name,
+    value: c.value,
+    path: c.path,
+    secure: true,
+    httpOnly: c.httpOnly,
+    sameSite: "no_restriction",
+    storeId: c.storeId,
+  };
+  if (!c.hostOnly) details.domain = c.domain;
+  if (!c.session && c.expirationDate) details.expirationDate = c.expirationDate;
+  try {
+    await chrome.cookies.set(details);
+  } catch {
+    /* 書き換えられないものは飛ばす */
+  }
+}
+async function relaxChatgptCookies() {
+  const all = await chrome.cookies.getAll({ domain: "chatgpt.com" }).catch(() => []);
+  for (const c of all) await relaxCookie(c);
+}
+chrome.cookies.onChanged.addListener(({ removed, cookie }) => {
+  if (!removed) relaxCookie(cookie);
+});
+chrome.runtime.onStartup.addListener(relaxChatgptCookies);
+chrome.runtime.onInstalled.addListener(relaxChatgptCookies);

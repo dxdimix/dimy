@@ -318,6 +318,12 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       .channel("hud-cards")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cards" }, (payload) => {
         const row = payload.new as { id: string; kind: CardKind; title: string; data: CardData };
+        // ChatGPT に同じ質問を渡したカード（調べもののとき PC の DIMY が出す）: 前のものと入れ替え、ピン留めで残す。最初に並べる（利用者の希望）
+        if (row.data?.chatgpt) {
+          setCards((prev) => [{ id: row.id, kind: row.kind, title: row.title, data: row.data, pinned: true, at: Date.now() }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)]);
+          logActivity(supabase, "card", `画面のカード（DIMY）: ChatGPT ${row.data.url ?? ""}`);
+          return;
+        }
         const say = row.data?.say;
         // 読み上げがまだその言葉に来ていなければ隠しておく（声を出さない画面・読み終えたあとは、すぐ出す）
         const hidden = Boolean(say) && speakOnRef.current && leaderRef.current && !replyDone.current && !sayMatches(spokenSoFar.current, say);
