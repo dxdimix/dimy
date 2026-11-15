@@ -10,6 +10,7 @@ import { captureScreen, shrinkImage, useDimyExtension, useIsDimyPc } from "@/lib
 import { Showcase } from "./Showcase";
 import { BUILTIN_TITLE, builtinCardsFor, chatCard, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Message } from "@/lib/types";
@@ -67,6 +68,8 @@ import {
   ShrinkIcon,
   StopIcon,
   WeatherIcon,
+  MenuIcon,
+  CalendarIcon,
 } from "./Icons";
 
 const PLACE_KEY = "dimy.weatherPlace";
@@ -96,6 +99,8 @@ function loadNumber(key: string, fallback: number) {
   const n = v === null ? NaN : Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+
+type MenuKey = "chat" | "bookmarks" | "calendar" | "weather" | "memory" | "pin" | "admin" | "settings" | "fullscreen";
 
 const iconBtn =
   "grid h-11 w-11 place-items-center rounded-full border border-cyan-400/25 bg-slate-950/50 text-cyan-300 backdrop-blur transition hover:border-cyan-300/70 hover:text-cyan-100 hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]";
@@ -162,7 +167,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [cards, setCards] = useState<Card[]>([]);
   // いまの会話（あなたの発言）と、その間に出たカード。次の会話に移ってもカードを呼び出せるよう、表 card_snapshots に控える
   const turnRef = useRef<{ id: string; cards: Map<string, Card> } | null>(null);
-  const [panel, setPanel] = useState<"none" | "chat" | "settings" | "bookmarks" | "pin" | "palette" | "weather" | "calendar" | "admin">("none");
+  const router = useRouter();
+  const [panel, setPanel] = useState<"none" | "chat" | "settings" | "bookmarks" | "pin" | "palette" | "weather" | "calendar" | "admin" | "menu">("none");
   const panelRef = useRef(panel);
   // Chrome のブックマーク（PC のディミが写したもの）。表がまだないときは空のまま
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -975,6 +981,19 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     }
   }
 
+  /** スマホのメニューで選んだもの */
+  function runMenu(key: MenuKey) {
+    setPanel("none");
+    logActivity(supabase, "ui", `メニュー: ${key}`);
+    if (key === "chat") toggleChat();
+    else if (key === "bookmarks") {
+      loadBookmarks();
+      setPanel("bookmarks");
+    } else if (key === "memory") router.push("/memory");
+    else if (key === "fullscreen") toggleFullscreen();
+    else setPanel(key);
+  }
+
   const time = now?.toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" });
   const date = now?.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", weekday: "short" });
   const pcLabel = online ? "PC オンライン" : online === false ? "PC オフライン" : "PC 確認中";
@@ -1055,7 +1074,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
       </div>
 
       {/* 右上：アイコン */}
-      <nav className="absolute right-5 top-5 z-[800] flex gap-2">
+      {/* スマホ（幅の狭い画面）では「会話」「設定」と「メニュー」だけを出し、ほかはメニューの中に並べる（はみ出して押せなくなるため） */}
+      <nav className="absolute right-3 top-3 z-[800] flex gap-2 md:right-5 md:top-5">
         <button onClick={() => toggleChat()} className={iconBtn} title="会話の履歴と文字入力" aria-label="会話の履歴と文字入力">
           <ChatIcon className="h-5 w-5" />
         </button>
@@ -1064,43 +1084,74 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
             if (panel !== "bookmarks") loadBookmarks();
             setPanel(panel === "bookmarks" ? "none" : "bookmarks");
           }}
-          className={iconBtn}
+          className={iconBtn + " hidden md:grid"}
           data-panel-toggle
           title="ブックマーク"
           aria-label="ブックマーク"
         >
           <BookmarkIcon className="h-5 w-5" />
         </button>
-        <Link href="/memory" className={iconBtn} title="覚えていること" aria-label="覚えていること">
+        <Link href="/memory" className={iconBtn + " hidden md:grid"} title="覚えていること" aria-label="覚えていること">
           <MemoryIcon className="h-5 w-5" />
         </Link>
-        <button onClick={() => setPanel(panel === "pin" ? "none" : "pin")} data-panel-toggle className={iconBtn} title="固定ウィンドウを置く" aria-label="固定ウィンドウを置く">
+        <button onClick={() => setPanel(panel === "pin" ? "none" : "pin")} data-panel-toggle className={iconBtn + " hidden md:grid"} title="固定ウィンドウを置く" aria-label="固定ウィンドウを置く">
           <PinIcon className="h-5 w-5" />
         </button>
-        <button onClick={() => setPanel(panel === "palette" ? "none" : "palette")} data-panel-toggle className={iconBtn} title="パレットをほかのモニターに開く" aria-label="パレットを開く">
+        <button onClick={() => setPanel(panel === "palette" ? "none" : "palette")} data-panel-toggle className={iconBtn + " hidden md:grid"} title="パレットをほかのモニターに開く" aria-label="パレットを開く">
           <PaletteIcon className="h-5 w-5" />
         </button>
-        <button onClick={() => setPanel(panel === "admin" ? "none" : "admin")} className={iconBtn} title="管理（会話・システム・動作の記録）" aria-label="管理">
+        <button onClick={() => setPanel(panel === "admin" ? "none" : "admin")} className={iconBtn + " hidden md:grid"} title="管理（会話・システム・動作の記録）" aria-label="管理">
           <AdminIcon className="h-5 w-5" />
         </button>
         <button onClick={() => setPanel(panel === "settings" ? "none" : "settings")} className={iconBtn} title="設定" aria-label="設定">
           <GearIcon className="h-5 w-5" />
         </button>
-        <button onClick={toggleFullscreen} className={iconBtn} title="全画面" aria-label="全画面の切り替え">
+        <button onClick={() => setPanel(panel === "menu" ? "none" : "menu")} data-panel-toggle className={iconBtn + " md:hidden"} title="メニュー" aria-label="メニュー">
+          <MenuIcon className="h-5 w-5" />
+        </button>
+        <button onClick={toggleFullscreen} className={iconBtn + " hidden md:grid"} title="全画面" aria-label="全画面の切り替え">
           {fullscreen ? <ShrinkIcon className="h-5 w-5" /> : <ExpandIcon className="h-5 w-5" />}
         </button>
       </nav>
 
-      {/* 左下：日時 */}
+      {/* スマホのメニュー: 右上に出しきれないボタンを、名前つきで並べる */}
+      {panel === "menu" && (
+        <DismissBox onClose={closePanel} className="absolute right-3 top-16 z-[950] w-[min(20rem,calc(100vw-1.5rem))] rounded-lg border border-cyan-400/30 bg-slate-950/95 p-2 text-sm backdrop-blur md:hidden">
+          {(
+            [
+              ["chat", "会話の履歴と文字入力", <ChatIcon key="i" className="h-5 w-5" />],
+              ["bookmarks", "ブックマーク", <BookmarkIcon key="i" className="h-5 w-5" />],
+              ["calendar", "カレンダー", <CalendarIcon key="i" className="h-5 w-5" />],
+              ["weather", "天気の詳細", <WeatherIcon key="i" code={weather?.code ?? 0} className="h-5 w-5" />],
+              ["memory", "覚えていること", <MemoryIcon key="i" className="h-5 w-5" />],
+              ["pin", "固定ウィンドウを置く", <PinIcon key="i" className="h-5 w-5" />],
+              ["admin", "管理（記録を見る）", <AdminIcon key="i" className="h-5 w-5" />],
+              ["settings", "設定", <GearIcon key="i" className="h-5 w-5" />],
+              ["fullscreen", fullscreen ? "全画面をやめる" : "全画面", fullscreen ? <ShrinkIcon key="i" className="h-5 w-5" /> : <ExpandIcon key="i" className="h-5 w-5" />],
+            ] as [MenuKey, string, React.ReactNode][]
+          ).map(([key, label, icon]) => (
+            <button
+              key={key}
+              onClick={() => runMenu(key)}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-base text-cyan-100 hover:bg-cyan-400/10"
+            >
+              <span className="text-cyan-300">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </DismissBox>
+      )}
+
+      {/* 左下：日時（スマホでは左上の PC の状態の下に、小さく出す。下はマイクと停止のボタンの場所のため） */}
       <button
         onClick={() => setPanel(panel === "calendar" ? "none" : "calendar")}
         data-panel-toggle
-        className="absolute bottom-6 left-6 z-[800] rounded-lg px-2 py-1 text-left font-mono transition hover:bg-cyan-400/10"
+        className="absolute left-3 top-12 z-[800] rounded-lg px-2 py-1 text-left font-mono transition hover:bg-cyan-400/10 md:bottom-6 md:left-6 md:top-auto"
         title="カレンダー（Google カレンダーの予定）"
         aria-label="カレンダーを開く"
       >
-        <div className="text-2xl tracking-widest text-cyan-200 sm:text-4xl drop-shadow-[0_0_10px_rgba(34,211,238,0.45)]">{time}</div>
-        <div className="mt-1 text-xs tracking-[0.25em] text-cyan-400/70">{date}</div>
+        <div className="text-xl tracking-widest text-cyan-200 md:text-4xl drop-shadow-[0_0_10px_rgba(34,211,238,0.45)]">{time}</div>
+        <div className="text-[11px] tracking-[0.2em] text-cyan-400/70 md:mt-1 md:text-xs md:tracking-[0.25em]">{date}</div>
       </button>
       {panel === "calendar" && <CalendarPanel session={session} onClose={closePanel} />}
 
@@ -1109,13 +1160,13 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         <button
           onClick={() => setPanel(panel === "weather" ? "none" : "weather")}
           data-panel-toggle
-          className="absolute bottom-6 right-6 z-[800] flex items-center gap-3 rounded-lg px-2 py-1 text-left transition hover:bg-cyan-400/10"
+          className="absolute right-3 top-16 z-[800] flex items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-cyan-400/10 md:bottom-6 md:right-6 md:top-auto md:gap-3"
           title={`${place?.name} ${weather.text ?? weatherLabel(weather.code)}（${weather.source}。押すと詳しく）`}
           aria-label="天気の詳細"
         >
-          <WeatherIcon code={weather.code} className="h-10 w-10 text-cyan-300" />
+          <WeatherIcon code={weather.code} className="h-7 w-7 text-cyan-300 md:h-10 md:w-10" />
           <div className="font-mono">
-            <div className="text-2xl text-cyan-200 sm:text-3xl">{Math.round(weather.temperature)}°</div>
+            <div className="text-lg text-cyan-200 md:text-3xl">{Math.round(weather.temperature)}°</div>
             <div className="text-xs text-cyan-400/70">
               {Math.round(weather.max)}° / {Math.round(weather.min)}°{weather.rain !== null && ` ・${weather.rain}%`}
             </div>
@@ -1314,8 +1365,8 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
 
       {/* 左端：アプリのショートカット。開いたアプリの小窓 */}
       <PinBoard state={pins} className="z-[5]" />
-      {panel === "pin" && <PinAdd state={pins} onClose={closePanel} className="absolute right-5 top-20 z-[850]" />}
-      {panel === "palette" && <ScreenPicker onClose={closePanel} className="absolute right-5 top-20 z-[850]" />}
+      {panel === "pin" && <PinAdd state={pins} onClose={closePanel} className="absolute right-3 top-40 z-[850] md:right-5 md:top-20" />}
+      {panel === "palette" && <ScreenPicker onClose={closePanel} className="absolute right-3 top-40 z-[850] md:right-5 md:top-20" />}
       <DropOverlay show={dragging} />
       <AppDock onOpen={openApp} />
       <AppWindows state={appWins} />

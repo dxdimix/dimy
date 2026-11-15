@@ -101,7 +101,7 @@ export function Settings(p: SettingsProps) {
         role="dialog"
         aria-label="設定"
         onClick={(e) => e.stopPropagation()}
-        className="dimy-fade-in flex max-h-[min(640px,calc(100dvh-2rem))] w-[560px] max-w-full flex-col rounded-lg border border-cyan-400/35 bg-slate-950/95 text-sm shadow-[0_0_40px_rgba(34,211,238,0.15)]"
+        className="dimy-fade-in flex max-h-[min(640px,calc(100dvh-2rem))] w-full min-w-0 max-w-[560px] flex-col rounded-lg border border-cyan-400/35 bg-slate-950/95 text-sm shadow-[0_0_40px_rgba(34,211,238,0.15)]"
       >
         <div className="flex items-center justify-between border-b border-cyan-400/20 px-5 py-3">
           <h2 className="font-mono text-xs tracking-[0.3em] text-cyan-300">SETTINGS</h2>
@@ -110,7 +110,7 @@ export function Settings(p: SettingsProps) {
           </button>
         </div>
 
-        <div role="tablist" className="flex gap-1 border-b border-cyan-400/20 px-3">
+        <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-cyan-400/20 px-2 [scrollbar-width:none] md:px-3">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -118,7 +118,7 @@ export function Settings(p: SettingsProps) {
               aria-selected={tab === t.id}
               onClick={() => choose(t.id)}
               className={
-                "-mb-px border-b-2 px-4 py-2.5 transition " +
+                "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 transition md:px-4 " +
                 (tab === t.id ? "border-cyan-300 text-cyan-100" : "border-transparent text-slate-400 hover:text-cyan-200")
               }
             >
@@ -127,7 +127,7 @@ export function Settings(p: SettingsProps) {
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 md:px-5">
           {tab === "voice" && <VoiceTab {...p} />}
           {tab === "wake" && <WakeTab {...p} />}
           {tab === "display" && <DisplayTab {...p} />}

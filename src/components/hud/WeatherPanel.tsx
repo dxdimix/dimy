@@ -64,7 +64,7 @@ export function WeatherPanel({ place, source, onClose }: { place: Place; source:
   const pct = (v: number) => (hi === lo ? 50 : ((v - lo) / (hi - lo)) * 100);
 
   return (
-    <div ref={ref} className="dimy-fade-in absolute bottom-24 right-5 z-[860] w-[460px] max-w-[calc(100vw-2.5rem)] rounded-lg border border-cyan-400/30 bg-slate-950/[0.97] p-4 text-sm backdrop-blur">
+    <div ref={ref} className="dimy-fade-in absolute inset-x-3 bottom-24 top-40 z-[860] overflow-y-auto md:inset-x-auto md:right-5 md:top-auto md:w-[460px] md:max-w-[calc(100vw-2.5rem)] md:overflow-visible rounded-lg border border-cyan-400/30 bg-slate-950/[0.97] p-4 text-sm backdrop-blur">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <span className="font-mono text-xs tracking-[0.3em] text-cyan-300">WEATHER</span>

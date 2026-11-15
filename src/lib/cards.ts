@@ -127,16 +127,17 @@ export function snapshotCards(cards: Card[]): Card[] {
 /** 会話のカード（文字入力と会話の履歴）。正面の真ん中に、字幕にかからない高さで出す。最初からピン留め */
 export function chatCard(vw: number, vh: number): Card {
   const w = Math.min(640, vw - 16);
-  const top = vw < 768 ? 64 : 96;
-  const h = Math.max(320, vh - top - (vw < 768 ? 280 : 290));
+  // スマホでは、上の段（PC の状態・日時・天気・アプリ）の下から
+  const top = vw < 768 ? 188 : 96;
+  const h = Math.max(260, vh - top - (vw < 768 ? 250 : 290));
   return { id: "chat", kind: "chat", title: "会話", data: {}, pinned: true, at: Date.now() + 2e13, float: { x: Math.round((vw - w) / 2), y: top, w, h } };
 }
 
 /** Web ページのカード（拡張機能があるとき、ディミの画面の中でページをそのまま開く）。正面に大きく、字幕にかからない高さで出す。利用者が開いたものなのでピン留め */
 export function webCard(url: string, title: string, vw: number, vh: number): Card {
-  const w = Math.min(1100, vw - 160);
-  const top = vw < 768 ? 64 : 96;
-  const h = Math.max(320, vh - top - (vw < 768 ? 280 : 290));
+  const w = Math.min(1100, vw < 768 ? vw - 16 : vw - 160);
+  const top = vw < 768 ? 188 : 96;
+  const h = Math.max(260, vh - top - (vw < 768 ? 250 : 290));
   return {
     id: `web-${Date.now()}`,
     kind: "web",

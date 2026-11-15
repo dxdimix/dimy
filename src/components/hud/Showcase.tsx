@@ -195,7 +195,7 @@ export function Showcase(p: Props) {
   const column = (list: Card[], side: "left" | "right" | "top") => {
     const style: CSSProperties =
       side === "top"
-        ? { top: "4.5rem", left: 12, right: 12, maxHeight: "45dvh" }
+        ? { top: "11.75rem", left: 12, right: 12, maxHeight: "calc(100dvh - 11.75rem - 17rem)" }
         : side === "right"
           ? { ...COLUMN_BASE, left: `calc(50% + ${INNER})` }
           : { ...COLUMN_BASE, right: `calc(50% + ${INNER})` };
@@ -234,8 +234,8 @@ export function Showcase(p: Props) {
       <button
         onClick={p.onCloseAll}
         className={
-          "absolute z-[790] rounded-full border border-cyan-400/40 bg-slate-950/85 px-4 py-1.5 text-sm text-cyan-100 backdrop-blur hover:border-cyan-300/80 " +
-          (narrow ? "bottom-[17rem] right-3" : "left-1/2 top-[4.4rem] -translate-x-1/2")
+          "absolute z-[790] rounded-full border border-cyan-400/40 bg-slate-950/85 text-cyan-100 backdrop-blur hover:border-cyan-300/80 " +
+          (narrow ? "right-3 top-[9.4rem] px-3 py-1 text-xs" : "left-1/2 top-[4.4rem] -translate-x-1/2 px-4 py-1.5 text-sm")
         }
         title="出ているカードをすべて閉じる（残したものも閉じる）"
       >

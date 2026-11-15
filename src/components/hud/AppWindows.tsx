@@ -83,7 +83,8 @@ export function useAppWindows() {
 function maxBox() {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  if (vw < 768) return { left: 0, top: 0, width: vw, height: vh };
+  // スマホ: 上の段（PC の状態・日時・天気・アプリのアイコン）と下のマイクの間いっぱい（ボタンが隠れないように）
+  if (vw < 768) return { left: 4, top: 152, width: vw - 8, height: Math.max(240, vh - 152 - 104) };
   const left = 76; // 左端のアプリのアイコン
   const top = 72; // 右上のボタン
   const bottom = 104; // 下のマイクと強制停止
@@ -225,7 +226,11 @@ export function AppWindows({ state }: { state: ReturnType<typeof useAppWindows> 
 /** 左端のショートカット（全アプリのアイコン） */
 export function AppDock({ onOpen }: { onOpen: (id: AppId, from?: Point) => void }) {
   return (
-    <nav className="absolute left-4 top-1/2 z-[900] flex -translate-y-1/2 flex-col gap-2" aria-label="アプリ">
+    // スマホ（幅の狭い画面）では、上の段（日時・天気の下）に横 1 列で並べる。左端に縦に並べると、カードと重なるため
+    <nav
+      className="absolute left-1/2 top-[6.75rem] z-[900] flex -translate-x-1/2 flex-row gap-2 md:left-4 md:top-1/2 md:translate-x-0 md:-translate-y-1/2 md:flex-col"
+      aria-label="アプリ"
+    >
       {APPS.map((app, i) => (
         <button
           key={app.id}
@@ -235,7 +240,7 @@ export function AppDock({ onOpen }: { onOpen: (id: AppId, from?: Point) => void 
           }}
           title={`${app.name}（Alt + ${i + 1}）`}
           aria-label={`${app.name} を開く`}
-          className="group relative grid h-11 w-11 place-items-center rounded-xl border border-cyan-400/25 bg-slate-950/50 text-cyan-300 backdrop-blur transition hover:border-cyan-300/70 hover:text-cyan-100 hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+          className="group relative grid h-10 w-10 place-items-center rounded-xl border md:h-11 md:w-11 border-cyan-400/25 bg-slate-950/50 text-cyan-300 backdrop-blur transition hover:border-cyan-300/70 hover:text-cyan-100 hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
         >
           <AppIcon id={app.id} className="h-5 w-5" />
         </button>

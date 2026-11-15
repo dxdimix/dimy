@@ -118,7 +118,7 @@ export function CalendarPanel({ session, onClose }: { session: Session; onClose:
   const selLabel = new Date(`${selected}T00:00:00+09:00`).toLocaleDateString("ja-JP", { timeZone: TZ, month: "long", day: "numeric", weekday: "short" });
 
   return (
-    <div ref={ref} className="dimy-fade-in absolute bottom-24 left-[76px] z-[860] flex max-h-[calc(100dvh-8rem)] w-[460px] max-w-[calc(100vw-2.5rem)] flex-col rounded-lg border border-cyan-400/30 bg-slate-950/[0.97] p-4 text-sm backdrop-blur">
+    <div ref={ref} className="dimy-fade-in absolute inset-x-3 bottom-24 top-40 z-[860] flex flex-col md:inset-x-auto md:left-[76px] md:top-auto md:max-h-[calc(100dvh-8rem)] md:w-[460px] md:max-w-[calc(100vw-2.5rem)] flex-col rounded-lg border border-cyan-400/30 bg-slate-950/[0.97] p-4 text-sm backdrop-blur">
       <div className="mb-3 flex items-center justify-between">
         <div className="min-w-0">
           <span className="font-mono text-xs tracking-[0.3em] text-cyan-300">CALENDAR</span>
