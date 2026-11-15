@@ -140,7 +140,8 @@ export function useWakeWord(o: {
       if (s === "standby") {
         // 呼びかけでなければ無視（周りの会話を残さないよう、中身は記録しない）
         if (woke === null) {
-          log?.("ignored", `待機中に呼びかけ以外の言葉を聞いた（${raw.trim().length} 文字・中身は残さない）`);
+          // 何も聞き取れなかったもの（0 文字）は記録しない（数秒ごとに出て、記録が見づらくなるため）
+          if (raw.trim()) log?.("ignored", `待機中に呼びかけ以外の言葉を聞いた（${raw.trim().length} 文字・中身は残さない）`);
           return;
         }
         if (woke === "") {
