@@ -448,7 +448,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     (c: Omit<CardDrag, "from">, at: { x: number; y: number }) => {
       // 離した場所に置く（帯の真ん中あたりが指の位置に来るように）
       const w = Math.min(520, window.innerWidth - 16);
-      const float = clampFloat({ x: at.x - w / 2, y: at.y - 24, w }, window.innerWidth, window.innerHeight);
+      // ページ・地図は中身の高さが決まらないので、幅と同じ高さ（正方形）で出す（利用者の決まり）。ほかは中身に合わせる
+      const square = c.kind === "web" || c.kind === "map";
+      const float = clampFloat({ x: at.x - w / 2, y: at.y - 24, w, h: square ? w : undefined }, window.innerWidth, window.innerHeight);
       setCards((prev) => [...prev, { ...c, id: `x-${Date.now()}`, pinned: true, at: Date.now() + 1e13, float }]);
       logActivity(supabase, "card", `カードから取り出して残した: ${c.title}`);
     },
