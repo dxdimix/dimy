@@ -219,7 +219,7 @@ function WakeTab(p: SettingsProps) {
         max={20}
         step={1}
         onChange={p.setFollowSec}
-        def={8}
+        def={0}
         format={(v) => (v === 0 ? "なし" : `${v} 秒`)}
       />
       <Toggle

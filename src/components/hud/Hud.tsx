@@ -76,7 +76,9 @@ const VOLUME_KEY = "dimy.volume"; // ディミの声の大きさ（PC 全体の�
 const OPEN_ON_KEY = "dimy.openOn"; // ディミの外で開く場所（"pc": DIMY が動いている PC の Chrome / "here": この端末のブラウザ）
 const SITE_ACCOUNTS_KEY = "dimy.siteAccounts"; // サイトごとに開く Chrome のプロフィール（{ サイト名: プロフィールのフォルダ名 }。"*" は指定がないとき）
 const SILENCE_KEY = "dimy.silenceSec"; // 話し終わりとみなすまでの無音の時間（秒）
-const FOLLOW_KEY = "dimy.followSec"; // 返事のあと、続けて話せる時間（秒）
+// 返事のあと、続けて話せる時間（秒）。利用者の決まりで、既定は 0 = 返事が終わったらマイクを切る
+// （以前の既定 8 秒が保存されていても使わないよう、名前を変えた）
+const FOLLOW_KEY = "dimy.followSecV2";
 const HOTKEY_KEY = "dimy.hotkey"; // 右 Ctrl を 2 回で話すか
 const CAPTION_KEY = "dimy.captionSec"; // 返事の字幕を出しておく時間（秒）
 
@@ -152,7 +154,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
   const [fullscreen, setFullscreen] = useState(false);
   const [speakOn, setSpeakOn] = useState(true);
   const [wakeOn, setWakeOn] = useState(false);
-  const [followSec, setFollowSec] = useState(8);
+  const [followSec, setFollowSec] = useState(0);
   const [silenceSec, setSilenceSec] = useState(1.5);
   const [hotkeyOn, setHotkeyOn] = useState(true);
   const [captionSec, setCaptionSec] = useState(12);
@@ -193,7 +195,7 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     if (p) setPlace(JSON.parse(p) as Place);
     setSpeakOn(load(SPEAK_KEY) !== "off");
     setWakeOn(load(WAKE_KEY) === "on");
-    setFollowSec(loadNumber(FOLLOW_KEY, 8));
+    setFollowSec(loadNumber(FOLLOW_KEY, 0));
     setSilenceSec(Math.min(3, Math.max(0.5, loadNumber(SILENCE_KEY, 1.5)))); // 0.5〜3 秒
     setHotkeyOn(load(HOTKEY_KEY) !== "off");
     setCaptionSec(loadNumber(CAPTION_KEY, 12));
