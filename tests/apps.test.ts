@@ -27,3 +27,12 @@ describe("canEmbed", () => {
     expect(canEmbed(app("medical"))).toBe(false);
   });
 });
+
+describe("アプリの名前で開く", () => {
+  it("かぶ太郎・DimiX・競馬Edge", () => {
+    expect(detectOpenCommand("かぶ太郎を開いて")?.id).toBe("kabu");
+    expect(detectOpenCommand("ディミックス開いて")?.id).toBe("fx");
+    expect(detectOpenCommand("DimiXを開いて")?.id).toBe("fx");
+    expect(detectOpenCommand("競馬エッジを見せて")?.id).toBe("keiba");
+  });
+});

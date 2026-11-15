@@ -9,6 +9,8 @@ describe("parseWake", () => {
     expect(parseWake("リミ 今日の天気は")).toBe("今日の天気は");
     expect(parseWake("ジミー")).toBe("");
     expect(parseWake("あディミ")).toBe(""); // 前に雑音が付いても見つける
+    expect(parseWake("ディミックスを開いて")).toBeNull(); // FX アプリの名前は呼びかけではない
+    expect(parseWake("ディミ、ディミックスを開いて")).toBe("ディミックスを開いて");
   });
   it("呼びかけで始まらなければ null（周りの会話には反応しない）", () => {
     expect(parseWake("今日の夕飯どうする")).toBeNull();
