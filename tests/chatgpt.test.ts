@@ -21,3 +21,13 @@ describe("fallbackCard", () => {
     expect(fallbackCard("ありがとう", "どういたしまして。")).toBeNull();
   });
 });
+
+import { isQuestion } from "../agent/lib/chatgpt.mjs";
+describe("isQuestion", () => {
+  it("質問・調べものは true", () => {
+    for (const t of ["喉が痛い 何でかな", "月曜にやる気が出る方法おしえて", "サンロード吉備路について教えて", "明日は雨？", "近くのおすすめのラーメン屋"]) expect(isQuestion(t)).toBe(true);
+  });
+  it("あいさつ・命令は false", () => {
+    for (const t of ["おはよう", "ありがとう", "YouTube を開いて", "カレンダーに登録して"]) expect(isQuestion(t)).toBe(false);
+  });
+});

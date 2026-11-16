@@ -5,7 +5,7 @@
 //
 // 起動: npm run agent（.env.local の SUPABASE_URL / SUPABASE_SECRET_KEY を使う）
 
-import { chatgptUrl, fallbackCard } from "./lib/chatgpt.mjs";
+import { chatgptUrl, fallbackCard, isQuestion } from "./lib/chatgpt.mjs";
 import { claudeCodeBillingPlaces, findApiKeyPlaces } from "./lib/apikey-check.mjs";
 import fs from "node:fs";
 import os from "node:os";
@@ -310,6 +310,11 @@ async function handle(message) {
   if (!claimed) return;
 
   currentTurn = { id: claimed.id, text: String(claimed.content), user: claimed.user_id, chatgptSent: false, cardShown: false };
+  // 質問・調べものの発言なら、返事を待たずに ChatGPT のカードを出す（利用者の決まり。Web 検索を始めたときにも出すが、1 回の発言で 1 枚だけ）
+  if (isQuestion(currentTurn.text)) {
+    currentTurn.chatgptSent = true;
+    void sendChatgptCard(currentTurn);
+  }
   log(`発言を受け取りました「${String(claimed.content).replace(/\s+/g, " ").slice(0, 300)}」。返事を作っています…`);
   const started = Date.now();
   const writer = createReplyWriter(claimed);

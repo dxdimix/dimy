@@ -38,3 +38,15 @@ export function fallbackCard(question, reply) {
     },
   };
 }
+
+/**
+ * 調べもの・質問の発言か（利用者の決まり: 何かを調べたり聞いたりしているときは、基本的に ChatGPT も出す）。
+ * あいさつ・お礼・アプリを開くなどの頼みは入れない。
+ */
+export function isQuestion(text) {
+  const t = String(text).replace(/\s+/g, "");
+  if (t.length < 5) return false;
+  if (/^(おはよう|こんにちは|こんばんは|おやすみ|ありがとう|了解|OK|ok|はい|いいえ)/.test(t) && t.length < 12) return false;
+  if (/(開いて|ひらいて|閉じて|止めて|再起動|再生して|登録して|追加して|消して|覚えて|送って)$/.test(t)) return false;
+  return /[?？]|教えて|おしえて|調べて|しらべて|知りたい|なに|何|なぜ|なんで|どうして|どう|どこ|どれ|どの|いつ|だれ|誰|いくら|いくつ|おすすめ|オススメ|方法|やり方|とは|違い|比較|かな$|ですか|ますか|の$|って$/.test(t);
+}
