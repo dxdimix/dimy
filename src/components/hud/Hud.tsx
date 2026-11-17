@@ -325,8 +325,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
             // 左端に縦いっぱいで固定（利用者の決まり 2026-11-17）。利用者が左側で動かした・大きさを変えたら、その場所を使う。折りたたみも引き継ぐ
             const old = prev.find((c) => c.data.chatgpt && c.float);
             const vw = window.innerWidth;
-            const float = old?.float && old.float.x < vw / 2 ? old.float : chatgptFloat(vw, window.innerHeight);
-            return [{ id: row.id, kind: row.kind, title: row.title, data: row.data, pinned: true, at: Date.now() + 3e13, float, collapsed: old?.collapsed }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)];
+            // 以前の置き場所（右端・小さめ）のカードからは引き継がない（gptv: 置き場所の決まりの版）
+            const float = old?.float && old.data.gptv === 2 && old.float.x < vw / 2 ? old.float : chatgptFloat(vw, window.innerHeight);
+            return [{ id: row.id, kind: row.kind, title: row.title, data: { ...row.data, gptv: 2 }, pinned: true, at: Date.now() + 3e13, float, collapsed: old?.collapsed }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)];
           });
           logActivity(supabase, "card", `画面のカード（DIMY）: ChatGPT ${row.data.url ?? ""}`);
           return;

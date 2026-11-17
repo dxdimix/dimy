@@ -31,6 +31,8 @@ export type CardData = {
   text?: string;
   /** 調べもののとき、同じ質問を ChatGPT に渡したカード（1 枚だけ。新しい調べもので入れ替える） */
   chatgpt?: boolean;
+  /** ChatGPT のカードの置き場所の決まりの版（2 = 左端に縦いっぱい） */
+  gptv?: number;
 };
 export type Card = {
   id: string;

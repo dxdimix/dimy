@@ -40,7 +40,32 @@
   let clicks = 0;
   let lastClick = 0;
   report("start");
-  const composerText = () => (document.querySelector("#prompt-textarea")?.innerText ?? document.querySelector("textarea")?.value ?? "").trim();
+  // 入力欄: ChatGPT は見えない textarea と、文字を書く欄（contenteditable）を両方持つことがある。文字が入っているものを探す
+  const composer = () => {
+    const els = [...document.querySelectorAll('#prompt-textarea, [contenteditable="true"], textarea')];
+    let best = null;
+    let len = 0;
+    for (const el of els) {
+      const t = (el.tagName === "TEXTAREA" ? el.value : el.innerText || el.textContent || "").trim();
+      if (t.length > len) {
+        best = el;
+        len = t.length;
+      }
+    }
+    return best;
+  };
+  const composerText = () => {
+    const el = composer();
+    return el ? (el.tagName === "TEXTAREA" ? el.value : el.innerText || el.textContent || "").trim() : "";
+  };
+  const sendButton = () =>
+    document.querySelector('#composer-submit-button, button[data-testid="send-button"], button[aria-label="プロンプトを送信する"], button[aria-label*="送信"], button[aria-label*="Send"], form button[type="submit"]');
+  // 送れなかったときに、画面の作りを確かめるための様子（ボタンの名前と数だけ。会話の中身は含めない）
+  const diag = () => {
+    const btns = [...document.querySelectorAll("button")];
+    const ids = btns.map((b) => b.getAttribute("data-testid") || b.id || b.getAttribute("aria-label")).filter(Boolean).slice(0, 25);
+    return `ボタン ${btns.length} 個 [${ids.join(", ")}]・入力欄の候補 ${document.querySelectorAll('#prompt-textarea, [contenteditable="true"], textarea').length} 個・枠 ${document.querySelectorAll("iframe").length} 個・${document.readyState}・${location.pathname}`;
+  };
   const timer = setInterval(() => {
     // 送られた: 会話のページに移った、または押したあとに入力欄が空になった
     if (/^\/c\//.test(location.pathname) || (clicks > 0 && !composerText())) {
@@ -50,17 +75,25 @@
     }
     if (Date.now() - started > 30000) {
       clearInterval(timer);
-      const btn = document.querySelector('#composer-submit-button, button[data-testid="send-button"]');
-      return report("timeout", `30 秒で送れませんでした（押した回数 ${clicks}・送信ボタン ${btn ? "あり" : "なし"}・入力欄の文字 ${composerText().length}）`);
+      return report("timeout", `30 秒で送れませんでした（押した回数 ${clicks}・送信ボタン ${sendButton() ? "あり" : "なし"}・入力欄の文字 ${composerText().length}・${diag()}）`);
     }
     if (clicks >= 3 || Date.now() - lastClick < 2500) return;
-    const btn = document.querySelector('#composer-submit-button, button[data-testid="send-button"]');
-    if (!btn || btn.disabled || btn.getAttribute("aria-disabled") === "true" || !composerText()) return;
+    if (!composerText()) return;
     // ページの準備が終わるのを少し待ってから押す（最初は読み込み開始から 1.5 秒以上あける）
     if (Date.now() - started < 1500) return;
+    const btn = sendButton();
+    if (btn && (btn.disabled || btn.getAttribute("aria-disabled") === "true")) return;
     clicks++;
     lastClick = Date.now();
-    btn.click();
-    report("clicked", `${clicks} 回目`);
+    if (btn) {
+      btn.click();
+      report("clicked", `${clicks} 回目（送信ボタン）`);
+    } else {
+      // 送信ボタンが見つからないときは、入力欄で Enter を押す（送信ボタンと同じ働き。1 回の送信）
+      const el = composer();
+      el?.focus();
+      for (const type of ["keydown", "keypress", "keyup"]) el?.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      report("clicked", `${clicks} 回目（Enter・${diag()}）`);
+    }
   }, 400);
 })();
