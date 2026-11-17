@@ -1,6 +1,6 @@
 // 画面のカード（返事の中身を目でも見せる）の形と、言葉から出すカードを決める決まり。
 
-export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat" | "web" | "place";
+export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat" | "web" | "place" | "week";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
   stats?: { label: string; value: string; unit?: string }[];
@@ -71,11 +71,14 @@ export function clampFloat(f: { x: number; y: number; w: number; h?: number }, v
  * 発言の言葉から、画面がすぐ（PC の DIMY に聞かずに）出すカードを決める。
  * morning: その日はじめての「おはよう」かもしれないとき（日付と天気を出す）
  */
-export function builtinCardsFor(text: string): ("weather" | "date" | "schedule")[] {
+export function builtinCardsFor(text: string): BuiltinKind[] {
   const t = text.replace(/\s+/g, "");
-  const out: ("weather" | "date" | "schedule")[] = [];
+  const out: BuiltinKind[] = [];
   const morning = /^(おはよう|おはよー|おっはよ|お早う)/.test(t);
-  if (morning || /(天気|気温|雨|雪|晴れ|傘|暑い|寒い|降水)/.test(t)) out.push("weather");
+  const weatherWords = /(天気|気温|雨|雪|晴れ|傘|暑い|寒い|降水)/.test(t);
+  // 週間の天気（利用者の決まり: 1 週間より少し長く、晴れ・雨のマークで週間カレンダーのように見せる）
+  if (weatherWords && /(週間|一週間|1週間|１週間|今週|来週|週末|土日|数日|この先|これから|10日|十日|2週間|二週間)/.test(t)) out.push("week");
+  if (morning || weatherWords) out.push("weather");
   if (morning || /(何日|何曜|日付|曜日|今日は何|カレンダー)/.test(t)) out.push("date");
   if (/(予定|スケジュール|会議|打ち合わせ|アポ)/.test(t)) out.push("schedule");
   return out;
@@ -100,8 +103,9 @@ export function youtubeEmbed(url: string): string | null {
   }
 }
 
+export type BuiltinKind = "weather" | "date" | "schedule" | "week";
 /** 画面が自分で出すカードの見出し */
-export const BUILTIN_TITLE: Record<"weather" | "date" | "schedule", string> = { weather: "天気", date: "今日の日付", schedule: "今日の予定" };
+export const BUILTIN_TITLE: Record<BuiltinKind, string> = { weather: "天気", date: "今日の日付", schedule: "今日の予定", week: "週間の天気（2 週間）" };
 
 /**
  * 文を「ふつう」と「強調」の断片に分ける。**〇〇** で囲んだところと、数字（単位つき）を強調する。

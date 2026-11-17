@@ -122,3 +122,23 @@ export async function fetchForecast(place: Place): Promise<Forecast> {
   }));
   return { hours, days };
 }
+
+/** 週間の天気（今日から days 日分。Open-Meteo は 16 日先まで）。週間カレンダーのカードで使う */
+export async function fetchDaily(place: Place, days = 14): Promise<DayWeather[]> {
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}` +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset" +
+    `&timezone=Asia%2FTokyo&forecast_days=${Math.min(16, Math.max(1, days))}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`週間の天気を取得できませんでした（${res.status}）`);
+  const j = await res.json();
+  return (j.daily.time as string[]).map((date, i) => ({
+    date,
+    code: j.daily.weather_code[i],
+    max: j.daily.temperature_2m_max[i],
+    min: j.daily.temperature_2m_min[i],
+    rain: j.daily.precipitation_probability_max?.[i] ?? null,
+    sunrise: j.daily.sunrise?.[i] ?? "",
+    sunset: j.daily.sunset?.[i] ?? "",
+  }));
+}

@@ -15,7 +15,7 @@ import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type CSSPr
 import type { Session } from "@supabase/supabase-js";
 import type { Card, CardDrag } from "@/lib/cards";
 import { CARD_DRAG_TYPE, clampFloat, emphasize, googleImagesUrl, splitColumns, mapDirUrl, mapEmbedUrl, mapOpenUrl, youtubeEmbed, youtubeId } from "@/lib/cards";
-import { fetchForecast, fetchJma, findPlace, weatherLabel, yahooWeatherUrl, type Forecast, type JmaResult, type Place, type Weather } from "@/lib/weather";
+import { fetchDaily, fetchForecast, fetchJma, findPlace, weatherLabel, yahooWeatherUrl, type Forecast, type DayWeather, type JmaResult, type Place, type Weather } from "@/lib/weather";
 import { CloseIcon, ExternalIcon, PinIcon } from "./Icons";
 import { getPref } from "@/lib/prefs";
 import { hasDimyExtension, WEB_FRAME_SANDBOX } from "@/lib/extension";
@@ -214,14 +214,26 @@ export function Showcase(p: Props) {
   // カードが多いとき（4 枚より多く、画面が広いとき）は、左右それぞれ 2 列にして画面いっぱいに並べる（利用者の希望）
   const perSide = wide && p.cards.filter((c) => !c.float).length > 4 ? 2 : 1;
   const colW = perSide === 2 ? `calc((50% - ${INNER} - 96px) / 2)` : COLUMN_BASE.width;
+  // 右端に固定の ChatGPT のカード（利用者の決まり）。右の列はこれと重ならないようにする
+  const gpt = floats.find((c) => c.data.chatgpt && c.float!.x > 300);
   const column = (list: Card[], side: "left" | "right" | "top", j = 0) => {
     const offset = j === 0 ? INNER : `${INNER} + ${colW} + 16px`;
-    const style: CSSProperties =
+    let style: CSSProperties =
       side === "top"
         ? { top: "11.75rem", left: 12, right: 12, maxHeight: "calc(100dvh - 11.75rem - 17rem)" }
         : side === "right"
           ? { ...COLUMN_BASE, width: colW, left: `calc(50% + ${offset})`, ...(j > 0 ? { maxHeight: OUTER_MAX_HEIGHT } : {}) }
           : { ...COLUMN_BASE, width: colW, right: `calc(50% + ${offset})`, ...(j > 0 ? { maxHeight: OUTER_MAX_HEIGHT } : {}) };
+    if (gpt && side === "right" && j === perSide - 1) {
+      if (perSide === 1) {
+        // 1 列のときは、ChatGPT のカードの左までの幅にする
+        style = { ...style, width: `min(${colW}, calc(50% - ${INNER} - ${gpt.float!.w + 40}px))` };
+      } else {
+        // 2 列のときは、外側の列を ChatGPT のカードの下から始める
+        const top = gpt.float!.y + (gpt.float!.h ?? 320) + 16;
+        style = { ...style, top, maxHeight: `calc(100dvh - ${top}px - 12.5rem)` };
+      }
+    }
     return (
       <div style={style} className="pointer-events-none absolute z-[700] flex flex-col gap-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:thin]">
         {list.map((c) => (
@@ -422,6 +434,8 @@ function CompactBody({ card, open, weather, session, all }: { card: Card; open: 
           </span>
         </div>
       ) : null;
+    case "week":
+      return <WeekWeatherCard place={null} compact />;
     case "date":
       return <DateLine />;
     case "schedule":
@@ -676,7 +690,7 @@ function CardView({
   place,
   session,
 }: Props & { card: Card; side: "left" | "right"; onGrab: (card: Card, e: ReactPointerEvent, mode: "move" | "resize") => void; floating?: boolean }) {
-  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT", web: "WEB", place: "SPOT" }[card.kind];
+  const head = { weather: "WEATHER", date: "DATE", schedule: "SCHEDULE", list: "NEWS", video: "VIDEO", points: "POINTS", page: "PAGE", image: "IMAGE", text: "NOTE", stats: "DATA", map: "MAP", talk: "HISTORY", chat: "CHAT", web: "WEB", place: "SPOT", week: "WEEK" }[card.kind];
   return (
     <div
       data-card-id={card.id}
@@ -758,6 +772,7 @@ export function CardBody({
         <Photo src={card.data.image} alt={card.data.links?.[0]?.url ?? card.title} className="mb-3 aspect-[16/7] w-full rounded-lg" />
       )}
       {card.kind === "weather" && <WeatherCard weather={weather} place={place} />}
+      {card.kind === "week" && <WeekWeatherCard place={place} />}
       {card.kind === "date" && <DateCard />}
       {card.kind === "schedule" && <ScheduleCard session={session} />}
       {card.kind === "chat" && <p className="text-base text-slate-400">会話は、メイン画面の会話のカードで使えます。</p>}
@@ -1241,6 +1256,113 @@ function WeatherCard({ weather: given, place: givenPlace }: { weather: Weather |
           {place.name}
           {jma ? "・気象庁" : ""}
           {sun?.sunrise && ` ・日の出 ${sun.sunrise.slice(11, 16)} 日の入 ${sun.sunset.slice(11, 16)}`}
+        </span>
+        <a href={yahooWeatherUrl(place.name)} target="_blank" rel="noopener" className="text-cyan-300 hover:underline">
+          Yahoo!天気
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/** 地域（カードに渡されないとき＝パレットなどでは、設定から読む） */
+function usePlace(given: Place | null): Place | null {
+  const [place] = useState<Place | null>(() => {
+    if (given) return given;
+    try {
+      return JSON.parse(getPref("weatherPlace") ?? "null") as Place | null;
+    } catch {
+      return null;
+    }
+  });
+  return place;
+}
+
+/**
+ * 週間の天気（利用者の決まり: 1 週間より少し長い 2 週間分を、晴れ・雨のマークで週間カレンダーのように見せる。文字だけにしない）。
+ * 曜日の列（日〜土）にそろえ、今日から 14 日分。気象庁の週間予報がある日は気象庁、それ以外は Open-Meteo。
+ */
+function WeekWeatherCard({ place: given, compact = false }: { place: Place | null; compact?: boolean }) {
+  const place = usePlace(given);
+  const [days, setDays] = useState<DayWeather[] | null>(null);
+  const [jma, setJma] = useState<JmaResult | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!place) return;
+    fetchDaily(place, 14).then(setDays).catch((e) => setError(String(e?.message ?? e)));
+    fetchJma(place).then(setJma).catch(() => {});
+  }, [place]);
+  if (!place) return <p className="text-slate-400">天気の地域が決まっていません（設定 →「表示」）。</p>;
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: TZ });
+  // 気象庁の予報で上書きした 1 日分
+  type Cell = { date: string; code: number; max: number | null; min: number | null; rain: number | null };
+  const merged: Cell[] = (days ?? [])
+    .filter((d) => d.date >= today)
+    .slice(0, 14)
+    .map((d) => {
+      const j = jma?.forecast.days.find((x) => x.date === d.date) ?? jma?.forecast.week.find((x) => x.date === d.date);
+      return { date: d.date, code: j?.wmo ?? d.code, max: j?.max ?? d.max, min: j?.min ?? d.min, rain: j?.pop ?? d.rain };
+    });
+  // Open-Meteo が取れなくても、気象庁の週間予報だけで出す
+  if (!merged.length && jma) {
+    for (const j of [...jma.forecast.days, ...jma.forecast.week]) {
+      if (j.date >= today && !merged.some((m) => m.date === j.date)) merged.push({ date: j.date, code: j.wmo, max: j.max, min: j.min, rain: j.pop });
+    }
+    merged.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  if (!merged.length) return <p className="text-slate-400">{error || "週間の天気を読み込んでいます…"}</p>;
+  const wd = (date: string) => new Date(`${date}T12:00:00+09:00`).getUTCDay();
+  if (compact) {
+    return (
+      <div className="flex gap-1 overflow-x-auto">
+        {merged.slice(0, 8).map((c) => (
+          <div key={c.date} className="flex w-10 shrink-0 flex-col items-center text-[11px]">
+            <span className={wd(c.date) === 0 ? "text-rose-300" : wd(c.date) === 6 ? "text-sky-300" : "text-cyan-200"}>{Number(c.date.slice(8))}</span>
+            <WeatherArt code={c.code} size={24} />
+            <span className="font-mono text-rose-300">{c.max === null ? "-" : Math.round(c.max)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  // 曜日の列にそろえる（最初の週は今日より前を空ける）
+  const lead = wd(merged[0].date);
+  const cells: (Cell | null)[] = [...Array.from({ length: lead }, () => null), ...merged];
+  while (cells.length % 7) cells.push(null);
+  const names = ["日", "月", "火", "水", "木", "金", "土"];
+  const color = (i: number) => (i === 0 ? "text-rose-300" : i === 6 ? "text-sky-300" : "text-cyan-200");
+  return (
+    <div className="@container space-y-2">
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {names.map((n, i) => (
+          <div key={n} className={"text-sm font-bold " + color(i)}>
+            {n}
+          </div>
+        ))}
+        {cells.map((c, i) =>
+          c ? (
+            <div key={c.date} className={"flex flex-col items-center rounded-md py-1.5 " + (c.date === today ? "bg-cyan-400/20 ring-1 ring-cyan-300/60" : "bg-slate-800/50")}>
+              <span className={"font-mono text-sm " + color(i % 7)}>
+                {c.date === today ? "今日" : `${Number(c.date.slice(5, 7))}/${Number(c.date.slice(8))}`}
+              </span>
+              <WeatherArt code={c.code} size={36} />
+              <span className="hidden text-[11px] leading-tight text-slate-300 @[520px]:block">{weatherLabel(c.code)}</span>
+              <span className="font-mono text-base leading-tight">
+                <b className="text-rose-300">{c.max === null ? "-" : Math.round(c.max)}</b>
+                <span className="text-slate-500">/</span>
+                <b className="text-sky-300">{c.min === null ? "-" : Math.round(c.min)}</b>
+              </span>
+              <span className={"font-mono text-xs " + ((c.rain ?? 0) >= 50 ? "font-bold text-sky-300" : "text-sky-300/70")}>☂{c.rain ?? "-"}%</span>
+            </div>
+          ) : (
+            <div key={`e${i}`} />
+          ),
+        )}
+      </div>
+      <div className="flex justify-between text-sm text-slate-400">
+        <span>
+          {place.name}
+          {jma ? "・気象庁（週間予報の範囲）＋Open-Meteo" : "・Open-Meteo"}
         </span>
         <a href={yahooWeatherUrl(place.name)} target="_blank" rel="noopener" className="text-cyan-300 hover:underline">
           Yahoo!天気

@@ -117,3 +117,12 @@ describe("話に合わせてカードを出す", () => {
     expect(splitSentences("向いています。乗れるもの: メリーゴーランド。料金は？")).toEqual(["向いています。", "乗れるもの: メリーゴーランド。", "料金は？"]);
   });
 });
+
+describe("builtinCardsFor の週間の天気", () => {
+  it("一週間の天気では週間のカードを出す", async () => {
+    const { builtinCardsFor } = await import("../src/lib/cards");
+    expect(builtinCardsFor("一週間の天気を教えて")).toContain("week");
+    expect(builtinCardsFor("今週の天気は？")).toContain("week");
+    expect(builtinCardsFor("今日の天気は？")).not.toContain("week");
+  });
+});

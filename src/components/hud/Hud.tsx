@@ -320,7 +320,13 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         const row = payload.new as { id: string; kind: CardKind; title: string; data: CardData };
         // ChatGPT に同じ質問を渡したカード（調べもののとき PC の DIMY が出す）: 前のものと入れ替え、ピン留めで残す。最初に並べる（利用者の希望）
         if (row.data?.chatgpt) {
-          setCards((prev) => [{ id: row.id, kind: row.kind, title: row.title, data: row.data, pinned: true, at: Date.now() }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)]);
+          // 右端に固定（利用者の決まり: 大きさは 350×310 ほど。全部のやり取りで同じ場所）。利用者が動かしたら、その場所を次も使う
+          setCards((prev) => {
+            const old = prev.find((c) => c.data.chatgpt && c.float);
+            const vw = window.innerWidth;
+            const float = old?.float ?? clampFloat({ x: vw - 350 - 16, y: 64, w: 350, h: 310 }, vw, window.innerHeight);
+            return [{ id: row.id, kind: row.kind, title: row.title, data: row.data, pinned: true, at: Date.now() + 3e13, float }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)];
+          });
           logActivity(supabase, "card", `画面のカード（DIMY）: ChatGPT ${row.data.url ?? ""}`);
           return;
         }
