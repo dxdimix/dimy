@@ -126,3 +126,14 @@ describe("builtinCardsFor の週間の天気", () => {
     expect(builtinCardsFor("今日の天気は？")).not.toContain("week");
   });
 });
+
+describe("左端に ChatGPT を固定したときの列", () => {
+  it("左の外側の列は使わない", () => {
+    const c = (id: string) => ({ id, kind: "text" as const, title: id, data: {}, pinned: false, at: 0 });
+    const r = splitColumns(["1", "2", "3", "4", "5", "6"].map(c), 2, true);
+    expect(r.right[0].map((x) => x.id)).toEqual(["1", "4"]);
+    expect(r.left[0].map((x) => x.id)).toEqual(["2", "5"]);
+    expect(r.right[1].map((x) => x.id)).toEqual(["3", "6"]);
+    expect(r.left[1]).toEqual([]);
+  });
+});

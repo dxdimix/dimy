@@ -8,7 +8,7 @@
 
 import { captureScreen, shrinkImage, useDimyExtension, useIsDimyPc } from "@/lib/extension";
 import { Showcase } from "./Showcase";
-import { BUILTIN_TITLE, builtinCardsFor, chatCard, sayMatches, splitSentences, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
+import { BUILTIN_TITLE, builtinCardsFor, chatCard, chatgptFloat, sayMatches, splitSentences, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -322,10 +322,11 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
         if (row.data?.chatgpt) {
           // 右端に固定（利用者の決まり: 大きさは 350×310 ほど。全部のやり取りで同じ場所）。利用者が動かしたら、その場所を次も使う
           setCards((prev) => {
+            // 左端に縦いっぱいで固定（利用者の決まり 2026-11-17）。利用者が左側で動かした・大きさを変えたら、その場所を使う。折りたたみも引き継ぐ
             const old = prev.find((c) => c.data.chatgpt && c.float);
             const vw = window.innerWidth;
-            const float = old?.float ?? clampFloat({ x: vw - 350 - 16, y: 64, w: 350, h: 310 }, vw, window.innerHeight);
-            return [{ id: row.id, kind: row.kind, title: row.title, data: row.data, pinned: true, at: Date.now() + 3e13, float }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)];
+            const float = old?.float && old.float.x < vw / 2 ? old.float : chatgptFloat(vw, window.innerHeight);
+            return [{ id: row.id, kind: row.kind, title: row.title, data: row.data, pinned: true, at: Date.now() + 3e13, float, collapsed: old?.collapsed }, ...prev.filter((c) => !c.data.chatgpt && c.id !== row.id)];
           });
           logActivity(supabase, "card", `画面のカード（DIMY）: ChatGPT ${row.data.url ?? ""}`);
           return;
@@ -415,6 +416,16 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
     }, 800);
     return () => clearTimeout(t);
   }, [cards]);
+
+  // ディミの中の ChatGPT の自動送信の様子（拡張機能の chatgpt.js が知らせる。答えの中身は含まない）を記録に残す
+  useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.origin !== "https://chatgpt.com" || !ev.data || typeof ev.data !== "object" || typeof ev.data.dimyChatgpt !== "string") return;
+      logActivity(supabase, "ui", `ChatGPT の自動送信: ${ev.data.dimyChatgpt}${ev.data.detail ? `（${String(ev.data.detail).slice(0, 200)}）` : ""}`);
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [supabase]);
 
   // DIMY の Chrome の拡張機能（入っていれば、ディミの画面の中でどのページも開ける）
   const extVersion = useDimyExtension();

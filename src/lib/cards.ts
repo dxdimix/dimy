@@ -43,21 +43,37 @@ export type Card = {
   hidden?: boolean;
   /** 利用者がドラッグで好きな場所に置いたカード（画面の中の位置と大きさ。px）。列には並べない */
   float?: { x: number; y: number; w: number; h?: number };
+  /** 上へ折りたたんで、帯だけにしたカード（ChatGPT のカード。中のページは読み込み直さないよう、隠すだけ） */
+  collapsed?: boolean;
 };
 
 /** 列に並べるカードを左右に分ける（右・左の互い違い）。好きな場所に置いたカードは除く。
  * perSide = 2 のときは、右の内側・左の内側・右の外側・左の外側の順に配る（カードが多いとき、画面いっぱいに並べるため） */
-export function splitColumns(cards: Card[], perSide = 1): { left: Card[][]; right: Card[][] } {
+export function splitColumns(cards: Card[], perSide = 1, skipLeftOuter = false): { left: Card[][]; right: Card[][] } {
   const left: Card[][] = Array.from({ length: perSide }, () => []);
   const right: Card[][] = Array.from({ length: perSide }, () => []);
+  // 配る順: 右の内側・左の内側・右の外側・左の外側。skipLeftOuter（左端に ChatGPT を固定しているとき）は左の外側を使わない
+  const slots: [Card[][], number][] = [];
+  for (let col = 0; col < perSide; col++) {
+    slots.push([right, col]);
+    if (!(skipLeftOuter && perSide > 1 && col === perSide - 1)) slots.push([left, col]);
+  }
   let n = 0;
   for (const c of cards) {
     if (c.float) continue;
-    const i = n++;
-    const col = Math.floor(i / 2) % perSide;
-    (i % 2 === 0 ? right : left)[col].push(c);
+    const [side, col] = slots[n++ % slots.length];
+    side[col].push(c);
   }
   return { left, right };
+}
+
+/** ChatGPT のカードの置き場所（利用者の決まり 2026-11-17: 左端に縦いっぱいで固定。左の外側の列の場所を使う） */
+export function chatgptFloat(vw: number, vh: number) {
+  const x = 64; // 左端のアプリのアイコンの右
+  const y = 10;
+  const w = Math.max(300, Math.min(400, Math.round(vw * 0.2)));
+  const h = Math.max(320, vh - y - 72); // 左下の日時の上まで
+  return { x, y, w, h };
 }
 
 /** 置き場所を画面の中に収める（帯が画面の外に出て、つかめなくならないように） */

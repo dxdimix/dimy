@@ -2,14 +2,14 @@
 // chatgpt.com/?q=〇〇 は、質問を入れた状態で ChatGPT を開く（画面を自動で操作するのではなく、アドレスを開くだけ）。
 
 /** 質問から ChatGPT のアドレスを作る。DIMY への合図など、利用者が言っていない部分は渡さない */
-export function chatgptUrl(question) {
+export function chatgptUrl(question, id = "") {
   const q = String(question)
     .replace(/\n*（DIMY への合図[\s\S]*$/, "")
     .replace(/\n*\[DIMY への合図\][\s\S]*$/, "")
     .trim()
     .slice(0, 2000);
   // dimy=1: ディミの中の枠で、拡張機能が送信ボタンを 1 回押す印（extension/chatgpt.js）
-  return `https://chatgpt.com/?q=${encodeURIComponent(q)}&dimy=1`;
+  return `https://chatgpt.com/?q=${encodeURIComponent(q)}&dimy=1${id ? `&dimyid=${encodeURIComponent(String(id).slice(0, 40))}` : ""}`;
 }
 
 /**

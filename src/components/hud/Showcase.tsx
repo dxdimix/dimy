@@ -214,8 +214,10 @@ export function Showcase(p: Props) {
   // カードが多いとき（4 枚より多く、画面が広いとき）は、左右それぞれ 2 列にして画面いっぱいに並べる（利用者の希望）
   const perSide = wide && p.cards.filter((c) => !c.float).length > 4 ? 2 : 1;
   const colW = perSide === 2 ? `calc((50% - ${INNER} - 96px) / 2)` : COLUMN_BASE.width;
-  // 右端に固定の ChatGPT のカード（利用者の決まり）。右の列はこれと重ならないようにする
-  const gpt = floats.find((c) => c.data.chatgpt && c.float!.x > 300);
+  // 左端に固定の ChatGPT のカード（利用者の決まり 2026-11-17）。左の外側の列は使わず、左の内側の列はこれと重ならない幅にする。
+  // 折りたたんでいるときは、帯の下から列を使う
+  const gpt = floats.find((c) => c.data.chatgpt && !c.collapsed);
+  const gptLeft = Boolean(gpt && gpt.float!.x < 300);
   const column = (list: Card[], side: "left" | "right" | "top", j = 0) => {
     const offset = j === 0 ? INNER : `${INNER} + ${colW} + 16px`;
     let style: CSSProperties =
@@ -224,7 +226,10 @@ export function Showcase(p: Props) {
         : side === "right"
           ? { ...COLUMN_BASE, width: colW, left: `calc(50% + ${offset})`, ...(j > 0 ? { maxHeight: OUTER_MAX_HEIGHT } : {}) }
           : { ...COLUMN_BASE, width: colW, right: `calc(50% + ${offset})`, ...(j > 0 ? { maxHeight: OUTER_MAX_HEIGHT } : {}) };
-    if (gpt && side === "right" && j === perSide - 1) {
+    if (gpt && gptLeft && side === "left" && j === 0) {
+      style = { ...style, width: `min(${colW}, calc(50% - ${INNER} - ${gpt.float!.x + gpt.float!.w + 16}px))` };
+    }
+    if (gpt && !gptLeft && side === "right" && j === perSide - 1) {
       if (perSide === 1) {
         // 1 列のときは、ChatGPT のカードの左までの幅にする
         style = { ...style, width: `min(${colW}, calc(50% - ${INNER} - ${gpt.float!.w + 40}px))` };
@@ -246,7 +251,7 @@ export function Showcase(p: Props) {
     <>
       {/* 好きな場所に置いたカード（新しく触ったものほど前） */}
       {floats.map((c, i) => (
-        <div key={c.id} className="absolute flex flex-col" style={{ left: c.float!.x, top: c.float!.y, width: c.float!.w, height: c.float!.h, zIndex: 720 + i }}>
+        <div key={c.id} className="absolute flex flex-col" style={{ left: c.float!.x, top: c.float!.y, width: c.float!.w, height: c.collapsed ? undefined : c.float!.h, zIndex: 720 + i }}>
           <CardView card={c} side="right" {...p} onGrab={startDrag} floating />
         </div>
       ))}
@@ -262,10 +267,10 @@ export function Showcase(p: Props) {
         <CompactList {...p} cards={p.cards.filter((c) => c.kind !== "chat")} />
       ) : (
         <>
-          {splitColumns(p.cards, perSide).right.map((list, j) => (
+          {splitColumns(p.cards, perSide, gptLeft).right.map((list, j) => (
             <Fragment key={`r${j}`}>{column(list, "right", j)}</Fragment>
           ))}
-          {splitColumns(p.cards, perSide).left.map((list, j) => (
+          {splitColumns(p.cards, perSide, gptLeft).left.map((list, j) => (
             <Fragment key={`l${j}`}>{column(list, "left", j)}</Fragment>
           ))}
         </>
@@ -707,6 +712,19 @@ function CardView({
         className="mb-3 flex shrink-0 cursor-grab touch-none select-none items-center gap-3"
         title="帯をつかんで、好きな場所へ動かせます"
       >
+        {card.data.chatgpt && (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onUpdate(card.id, { collapsed: !card.collapsed })}
+            title={card.collapsed ? "広げる" : "上へ折りたたむ"}
+            aria-label={card.collapsed ? "広げる" : "上へ折りたたむ"}
+            className="-ml-1 rounded p-1 text-cyan-300 hover:bg-cyan-400/15 hover:text-cyan-50"
+          >
+            <svg viewBox="0 0 20 20" className={"h-5 w-5 transition-transform " + (card.collapsed ? "rotate-180" : "")}>
+              <path d="M5 12l5-5 5 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
         <span className="font-mono text-xs tracking-[0.3em] text-cyan-400/80">{head}</span>
         <span className="min-w-0 flex-1 truncate text-xl font-semibold text-cyan-50">{card.title}</span>
         {card.kind === "web" && card.data.url && (
@@ -724,7 +742,7 @@ function CardView({
       {card.kind === "chat" ? (
         <div className="-mx-4 -mb-4 min-h-0 flex-1 overflow-hidden text-base">{renderChat()}</div>
       ) : card.kind === "web" ? (
-        <div className={"-mx-4 -mb-4 overflow-hidden rounded-b-xl " + (floating ? "min-h-0 flex-1" : "aspect-[4/3]")}>
+        <div className={"-mx-4 -mb-4 overflow-hidden rounded-b-xl " + (card.collapsed ? "hidden" : floating ? "min-h-0 flex-1" : "aspect-[4/3]")}>
           <WebFrame url={card.data.url ?? ""} title={card.title} image={card.data.image} onOpen={() => onOpenChrome(card.data.url ?? "", card.title)} />
         </div>
       ) : (
@@ -732,7 +750,7 @@ function CardView({
         <CardBody card={card} onOpenLink={onOpenLink} onOpenChrome={onOpenChrome} onOpenPage={onOpenPage} weather={weather} place={place} session={session} />
       </div>
       )}
-      {floating && (
+      {floating && !card.collapsed && (
         <div
           onPointerDown={(e) => onGrab(card, e, "resize")}
           className="absolute bottom-0 right-0 h-5 w-5 cursor-nwse-resize touch-none"

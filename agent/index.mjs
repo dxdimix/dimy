@@ -292,7 +292,7 @@ async function sendChatgptCard(turn) {
     user_id: turn.user,
     kind: "web",
     title: "ChatGPT に聞いた",
-    data: { url: chatgptUrl(turn.text), chatgpt: true, note: turn.text.slice(0, 200) },
+    data: { url: chatgptUrl(turn.text, turn.id), chatgpt: true, note: turn.text.slice(0, 200) },
   });
   log(error ? `ChatGPT のカードを出せませんでした: ${error.message}` : `ChatGPT のカードを出しました「${turn.text.slice(0, 60)}」`);
 }
