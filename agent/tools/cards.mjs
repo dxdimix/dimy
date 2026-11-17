@@ -25,7 +25,7 @@ export function normalizeCard(a) {
         title: String(it?.title ?? "").slice(0, 200),
         url: isUrl(it?.url) ? it.url : undefined,
         note: it?.note ? String(it.note).slice(0, 200) : undefined,
-        image: isUrl(it?.image) ? it.image : undefined,
+        image: isUrl(it?.image) && !isTitleOnlyImage(it.image) ? it.image : undefined,
       }))
       .filter((it) => it.title);
     if (!data.items.length) throw new Error("items が空です。");
@@ -81,7 +81,7 @@ export function normalizeCard(a) {
     if (!isUrl(a.url)) throw new Error("url（http / https）が必要です。");
     data.url = a.url;
     if (a.note) data.note = String(a.note).slice(0, 300);
-    if ((kind === "page" || kind === "web") && isUrl(a.image)) data.image = a.image;
+    if ((kind === "page" || kind === "web") && isUrl(a.image) && !isTitleOnlyImage(a.image)) data.image = a.image;
   }
   // 返事の中で、このカードを出したい言葉（画面は、読み上げがこの言葉を含む文に来たときに出す）
   if (a.say) data.say = String(a.say).slice(0, 60);
@@ -93,7 +93,7 @@ export function normalizeCard(a) {
   if (links.length) data.links = links;
   // どのカードにも付けられる写真（話の中身が伝わる写真。利用者の希望: 文字だけだと見づらい）。
   // なければ、PC の DIMY がリンクのページの見出し画像を探して、あとから添える
-  if (!data.image && isUrl(a.image) && kind !== "list" && kind !== "image") data.image = a.image;
+  if (!data.image && isUrl(a.image) && kind !== "list" && kind !== "image" && !isTitleOnlyImage(a.image)) data.image = a.image;
   return { kind, title, data };
 }
 
@@ -168,6 +168,26 @@ export function commonsResults(json, count) {
 }
 
 /** HTML の頭から見出し画像の URL を取り出す（相対の URL は絶対にする） */
+/**
+ * サイトの名前・タイトル・ロゴだけの画像か（利用者の決まり 2026-11-17: 「天気予報」「Yahoo!天気・災害」のような
+ * タイトルだけの大きな画像は、見ても情報にならないので出さない）。
+ * - サイトのトップや分類のページ（記事でないページ）の見出し画像は、たいていサイト共通の看板の画像
+ * - 画像のアドレスに logo・ogp・default・common・share・banner などが入っているもの
+ */
+export function isTitleOnlyImage(imageUrl, pageUrl) {
+  if (/(logo|ogp|og[-_]?image|og[-_]img|default|common|share|banner|social|sns|site[-_]?image|top[-_]?image|no[-_]?image|noimage|icon|brand|header|thumbnail[-_]?default|fb[-_]?image|twitter[-_]?card)/i.test(imageUrl)) return true;
+  if (!pageUrl) return false;
+  try {
+    const u = new URL(pageUrl);
+    const segs = u.pathname.split("/").filter(Boolean).filter((x) => !/^index\.\w+$/.test(x));
+    // 記事らしいページ: 深い階層か、番号の入った階層がある
+    const article = segs.length >= 2 || segs.some((x) => /\d{3,}/.test(x) || x.length >= 15) || /[?&](id|p|article|no)=\w/.test(u.search);
+    return !article;
+  } catch {
+    return false;
+  }
+}
+
 export function pageImageFromHtml(html, base) {
   const metas = html.match(/<meta\b[^>]*>/gi) ?? [];
   for (const want of ["og:image", "og:image:url", "twitter:image", "twitter:image:src"]) {
@@ -178,7 +198,10 @@ export function pageImageFromHtml(html, base) {
       if (!content) continue;
       try {
         const u = new URL(content.replace(/&amp;/g, "&"), base);
-        if (u.protocol === "https:" || u.protocol === "http:") return u.href;
+        if (u.protocol !== "https:" && u.protocol !== "http:") continue;
+        // サイトの名前やタイトルだけの画像は使わない（利用者の決まり。見ても情報にならない）
+        if (isTitleOnlyImage(u.href, base)) return undefined;
+        return u.href;
       } catch {
         /* 次を探す */
       }

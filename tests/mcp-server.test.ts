@@ -65,7 +65,7 @@ import { pageImageFromHtml } from "../agent/tools/cards.mjs";
 describe("カードの写真と数字", () => {
   it("ページの見出し画像を取り出す", () => {
     const html = `<head><meta name="twitter:image" content="/b.jpg"><meta content="https://img.example.com/a.jpg?x=1&amp;y=2" property="og:image"></head>`;
-    expect(pageImageFromHtml(html, "https://news.example.com/x")).toBe("https://img.example.com/a.jpg?x=1&y=2");
+    expect(pageImageFromHtml(html, "https://news.example.com/news/x")).toBe("https://img.example.com/a.jpg?x=1&y=2");
     expect(pageImageFromHtml(`<meta name="twitter:image" content="/b.jpg">`, "https://news.example.com/x/y")).toBe("https://news.example.com/b.jpg");
     expect(pageImageFromHtml("<meta charset=utf-8>", "https://e.com")).toBeUndefined();
   });
