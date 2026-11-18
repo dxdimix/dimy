@@ -6,6 +6,7 @@
 // - 右上のアイコン: 会話（履歴と文字入力のパネル）、ブックマーク、覚えていること、設定、全画面
 //   読み上げ・声・呼びかけなどの設定は、すべて設定の画面（Settings.tsx）にまとめる
 
+import { RichText } from "@/components/RichText";
 import { captureScreen, shrinkImage, useDimyExtension, useIsDimyPc } from "@/lib/extension";
 import { Showcase } from "./Showcase";
 import { BUILTIN_TITLE, builtinCardsFor, chatCard, chatgptFloat, sayMatches, splitSentences, webCard, clampFloat, snapshotCards, type Card, type CardData, type CardDrag, type CardKind } from "@/lib/cards";
@@ -1152,7 +1153,9 @@ export function Hud({ supabase, session }: { supabase: SupabaseClient; session: 
           }}
           className="dimy-caption max-h-[7.5rem] overflow-y-auto rounded-md bg-slate-950/45 px-3 py-1 backdrop-blur-sm text-center text-base leading-relaxed text-cyan-100/90 drop-shadow-[0_0_8px_rgba(2,6,23,0.9)] [mask-image:linear-gradient(to_bottom,transparent,black_14px,black)]"
         >
-          <p className="whitespace-pre-wrap pt-2">{caption}</p>
+          <p className="whitespace-pre-wrap pt-2">
+            <RichText text={caption} />
+          </p>
         </div>
         {captionKept && !speaker.speaking && (
           <button

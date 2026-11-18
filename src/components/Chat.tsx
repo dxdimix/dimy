@@ -1,5 +1,6 @@
 "use client";
 
+import { RichText } from "@/components/RichText";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
@@ -374,7 +375,7 @@ export function Chat({
                   : "bg-slate-800 text-slate-100")
               }
             >
-              {m.content}
+              <RichText text={m.content} strongClass="font-bold" />
               {onRecall && m.role === "user" && (
                 <button onClick={() => onRecall(m.id)} className="mt-1 block text-xs text-cyan-200 underline-offset-2 hover:underline" title="そのときの会話とカードを、画面に出し直します">
                   ▸ カードをもう一度出す
