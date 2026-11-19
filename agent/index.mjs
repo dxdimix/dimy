@@ -135,7 +135,7 @@ const claude = new ClaudeSession({
     log(`道具を使いました: ${name}`);
     if (currentTurn && /show_card/.test(name)) currentTurn.cardShown = true;
     // 調べもの（Web 検索）を始めたら、同じ質問を ChatGPT にも渡したカードを画面に出す（利用者の希望。1 回の返事で 1 回だけ）
-    if (name === "WebSearch" && currentTurn && !currentTurn.chatgptSent) {
+    if (name === "WebSearch" && currentTurn && !currentTurn.chatgptSent && !currentTurn.morning) {
       currentTurn.chatgptSent = true;
       void sendChatgptCard(currentTurn);
     }
@@ -329,9 +329,18 @@ async function handle(message) {
     }
 
     // その日はじめての「おはよう」なら、朝の定番メッセージ（あいさつ・日付・天気・一言）で答えるよう合図を付ける
-    const content = (await isFirstMorningGreeting(claimed))
-      ? `${claimed.content}\n\n（DIMY への合図: 今日はじめての「おはよう」です。朝の定番メッセージで答えてください）`
-      : claimed.content;
+    const firstMorning = await isFirstMorningGreeting(claimed);
+    // 「おはよう」には、Claude を待たずに「おはようございます。」と書いて、すぐ読み上げを始める（利用者の決まり 2026-11-20: 考え始める前に話し始め、間を感じさせない）
+    const greeting = /^\s*(おはよう|おはよー|お早う)/.test(String(claimed.content)) ? "おはようございます。" : "";
+    if (greeting) {
+      writer.update(greeting);
+      if (currentTurn?.id === claimed.id) currentTurn.morning = true;
+    }
+    const content = firstMorning
+      ? `${claimed.content}\n\n（DIMY への合図: 今日はじめての「おはよう」です。朝の定番メッセージで答えてください。「おはようございます。」は画面がもう言ったので書かず、日付から始めてください）`
+      : greeting
+        ? `${claimed.content}\n\n（DIMY への合図: 「おはようございます。」は画面がもう言ったので書かないでください）`
+        : claimed.content;
     let prompt;
     if (claude.alive && claude.turns > 0) {
       prompt = formatTurn(content);
@@ -362,11 +371,14 @@ async function handle(message) {
     }
 
     let firstAt = 0;
-    const reply = await claude.ask(prompt, (text) => {
+    // あいさつを先に書いたときは、Claude の文の頭のあいさつを除いて、あいさつのあとにつなぐ
+    const withGreeting = (text) => (greeting ? `${greeting}\n${String(text).replace(/^\s*おはよう(ございます)?[。！!、\s]*/, "")}`.trim() : text);
+    const raw = await claude.ask(prompt, (text) => {
       firstAt ||= Date.now();
-      writer.update(text);
+      writer.update(withGreeting(text));
     });
-    if (!reply) throw new Error("返事が空でした。");
+    if (!raw) throw new Error("返事が空でした。");
+    const reply = withGreeting(raw);
 
     await writer.finish(reply);
     log(`返事「${reply.replace(/\s+/g, " ").slice(0, 300)}」`);
