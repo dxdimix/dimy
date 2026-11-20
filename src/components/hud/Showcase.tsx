@@ -397,9 +397,11 @@ function CompactBody({ card, open, weather, session, all }: { card: Card; open: 
       return (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {d.stats?.map((st, i) => (
-            <span key={i} className="text-xs text-slate-300">
+            <span key={i} className="inline-flex items-center gap-1 text-xs text-slate-300">
               {st.label} <b className="font-mono text-base text-white">{st.value}</b>
               {st.unit}
+              {st.change && <span className={"font-mono " + changeColor(st.change)}>{st.change}</span>}
+              {st.series && st.series.length >= 2 && <Sparkline values={st.series} className="h-4 w-12" />}
             </span>
           ))}
         </div>
@@ -818,17 +820,30 @@ export function CardBody({
       {card.kind === "map" && <MapCard card={card} onOpenLink={onOpenLink} />}
       {card.kind === "place" && <PlaceCard card={card} onOpenLink={onOpenLink} onOpenChrome={onOpenChrome} />}
       {card.kind === "stats" && (
-        <div className={"grid gap-3 " + ((card.data.stats?.length ?? 0) > 4 ? "grid-cols-3" : "grid-cols-2")}>
+        <div className="@container"><div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3">
           {card.data.stats?.map((s, i) => (
             <div key={i} className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2">
               <div className="truncate text-sm text-cyan-300/80">{s.label}</div>
-              <div className="font-mono text-4xl font-bold leading-tight text-white">
+              <div className="whitespace-nowrap font-mono text-2xl font-bold leading-tight text-white @[30rem]:text-3xl">
                 {s.value}
-                {s.unit && <span className="ml-1 text-xl font-semibold text-cyan-200">{s.unit}</span>}
+                {s.unit && <span className="ml-1 text-lg font-semibold text-cyan-200">{s.unit}</span>}
               </div>
+              {s.change && <div className={"font-mono text-base font-bold " + changeColor(s.change)}>{s.change}</div>}
+              {/* 直近の推移（利用者の決まり: 価格とグラフをセットで） */}
+              {s.series && s.series.length >= 2 && (
+                <div className="mt-1">
+                  <Sparkline values={s.series} className="h-12 w-full" />
+                  {s.seriesFrom && s.seriesTo && (
+                    <div className="flex justify-between font-mono text-[11px] text-slate-500">
+                      <span>{s.seriesFrom.slice(5).replace("-", "/")}</span>
+                      <span>{s.seriesTo.slice(5).replace("-", "/")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
-        </div>
+        </div></div>
       )}
       {card.kind === "points" && card.data.style === "steps" && (
         <ol className="relative space-y-3 pl-1">
@@ -1387,6 +1402,32 @@ function WeekWeatherCard({ place: given, compact = false }: { place: Place | nul
         </a>
       </div>
     </div>
+  );
+}
+
+/** 上げ下げの色（上げは緑・下げは赤） */
+function changeColor(change: string) {
+  return /^\s*[-−▼]/.test(change) ? "text-rose-300" : /^\s*[+＋▲]/.test(change) ? "text-emerald-300" : "text-slate-300";
+}
+
+/** 直近の推移の小さなグラフ（線と、下を薄く塗る。最初より上がっていれば緑・下がっていれば赤） */
+function Sparkline({ values, className = "" }: { values: number[]; className?: string }) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const W = 100;
+  const H = 30;
+  const pts = values.map((v, i) => [Math.round((i / (values.length - 1)) * W * 10) / 10, Math.round((H - 2 - ((v - min) / span) * (H - 4)) * 10) / 10]);
+  const line = pts.map(([x, y]) => `${x},${y}`).join(" ");
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? "#6ee7b7" : "#fda4af";
+  const last = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className={className} aria-label={`推移 ${values[0]} → ${values[values.length - 1]}`}>
+      <polygon points={`0,${H} ${line} ${W},${H}`} fill={color} opacity="0.12" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r="1.8" fill={color} />
+    </svg>
   );
 }
 

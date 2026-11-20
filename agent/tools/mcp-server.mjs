@@ -80,7 +80,21 @@ export const TOOLS = [
           items: { type: "object", properties: { title: { type: "string" }, url: { type: "string" } } },
         },
         say: { type: "string", description: "返事の文章の中で、このカードを出したい言葉（その文にそのまま出てくる短い言葉。例: 料金 / チューピーコースター / 営業時間）。画面は読み上げがこの言葉に来たときにカードを出す。「|」で言い換えを並べられる" },
-        stats: { type: "array", items: { type: "object", properties: { label: { type: "string" }, value: { type: "string" }, unit: { type: "string" } } } },
+        stats: {
+          type: "array",
+          description: "大事な数字。株価・為替・指数には ticker を付けると、直近 30 営業日の推移の小さなグラフが自動で付く（利用者の決まり: 価格とグラフをセットで）。ticker がない経済指標は、分かれば series に古い順の数字を入れる",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              value: { type: "string" },
+              unit: { type: "string" },
+              change: { type: "string", description: "前日比など（例: +1.2% / -350 円）" },
+              ticker: { type: "string", enum: ["nikkei", "topix", "dow", "sp500", "nasdaq", "usdjpy", "eurjpy", "eurusd", "gold", "oil", "btc", "us10y", "jp10y"] },
+              series: { type: "array", items: { type: "number" }, description: "推移（古い順。グラフ用）" },
+            },
+          },
+        },
         points: { type: "array", items: { type: "string" } },
         style: { type: "string", enum: ["points", "steps"] },
         url: { type: "string" },

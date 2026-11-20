@@ -71,7 +71,7 @@ describe("カードの写真と数字", () => {
   });
   it("数字のカード", () => {
     expect(normalizeCard({ kind: "stats", title: "市場", stats: [{ label: "日経平均", value: "38,500", unit: "円" }, { label: "", value: "1" }] }).data).toEqual({
-      stats: [{ label: "日経平均", value: "38,500", unit: "円" }],
+      stats: [{ label: "日経平均", value: "38,500", unit: "円", ticker: "nikkei" }],
     });
   });
 });

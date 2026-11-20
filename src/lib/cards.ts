@@ -3,7 +3,8 @@
 export type CardKind = "weather" | "date" | "schedule" | "list" | "video" | "points" | "page" | "image" | "text" | "stats" | "map" | "talk" | "chat" | "web" | "place" | "week";
 export type CardData = {
   items?: { title: string; url?: string; note?: string; image?: string }[];
-  stats?: { label: string; value: string; unit?: string }[];
+  /** 大事な数字。series は直近の推移（古い順。株価・為替は PC の DIMY が ticker から書き足す）。change は前日比 */
+  stats?: { label: string; value: string; unit?: string; change?: string; ticker?: string; series?: number[]; seriesFrom?: string; seriesTo?: string }[];
   places?: { name: string; query: string; note?: string; from?: string }[];
   /** image: 言葉で探した写真（PC の DIMY が Wikimedia Commons から探して書き足す） */
   images?: { url: string; title: string; page: string }[];

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { aliasLegacyEnv } from "../lib/env.mjs";
+import { TICKERS, fetchSeries, guessTicker } from "../lib/markets.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 loadEnv({ path: path.join(ROOT, ".env.local"), quiet: true });
@@ -36,7 +37,16 @@ export function normalizeCard(a) {
   } else if (kind === "stats") {
     data.stats = (Array.isArray(a.stats) ? a.stats : [])
       .slice(0, 6)
-      .map((x) => ({ label: String(x?.label ?? "").slice(0, 40), value: String(x?.value ?? "").slice(0, 20), unit: x?.unit ? String(x.unit).slice(0, 10) : undefined }))
+      .map((x) => {
+        const st = { label: String(x?.label ?? "").slice(0, 40), value: String(x?.value ?? "").slice(0, 20), unit: x?.unit ? String(x.unit).slice(0, 10) : undefined };
+        if (x?.change) st.change = String(x.change).slice(0, 20);
+        // 直近の推移のグラフ（利用者の決まり）: ticker（株価・為替）か、ディミが渡した数字の並び
+        const ticker = TICKERS[x?.ticker] ? x.ticker : guessTicker(st.label);
+        if (ticker) st.ticker = ticker;
+        const series = Array.isArray(x?.series) ? x.series.map(Number).filter(Number.isFinite).slice(-60) : [];
+        if (series.length >= 2) st.series = series;
+        return st;
+      })
       .filter((x) => x.label && x.value);
     if (!data.stats.length) throw new Error("stats が空です。");
   } else if (kind === "place") {
@@ -211,7 +221,27 @@ export function pageImageFromHtml(html, base) {
 }
 
 /** 一覧とページのカードに、画像がなければページの見出し画像を添える（並べて同時に探す） */
+/** 株価・為替の項目に、直近 30 営業日の終値を書き足す（グラフ用）。前日比がなければ終値から作る */
+async function addSeries(card) {
+  await Promise.all(
+    (card.data.stats ?? []).map(async (st) => {
+      if (!st.ticker || st.series) return;
+      const rows = await fetchSeries(st.ticker, 30);
+      if (rows.length < 2) return;
+      st.series = rows.map((r) => r.close);
+      st.seriesFrom = rows[0].date;
+      st.seriesTo = rows[rows.length - 1].date;
+      if (!st.change) {
+        const [a, b] = rows.slice(-2).map((r) => r.close);
+        const pct = ((b - a) / a) * 100;
+        st.change = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+      }
+    }),
+  );
+}
+
 async function addImages(card) {
+  if (card.kind === "stats") await addSeries(card);
   if (card.kind === "list") {
     await Promise.all(
       card.data.items.map(async (it) => {
@@ -262,6 +292,7 @@ export async function showCard(a) {
 /** 数字・要点・文・地図・動画のカードで、写真がなくリンクがあるもの（リンクのページの見出し画像を添える） */
 const PHOTO_FROM_LINK = ["stats", "points", "text", "map"];
 function needsImages(card) {
+  if (card.kind === "stats" && card.data.stats?.some((st) => st.ticker && !st.series)) return true;
   if (PHOTO_FROM_LINK.includes(card.kind)) return !card.data.image && Boolean(card.data.links?.[0]?.url);
   if (card.kind === "image") return Boolean(card.data.query) && !card.data.url;
   if (card.kind === "list") return card.data.items.some((it) => !it.image && it.url);
