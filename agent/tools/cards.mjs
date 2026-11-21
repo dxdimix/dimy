@@ -248,6 +248,10 @@ async function addImages(card) {
         if (!it.image && it.url) it.image = await findPageImage(it.url);
       }),
     );
+    // 同じ画像が 2 件以上に付いたら、まとめ記事やサイト共通の画像なので外す（利用者の決まり 2026-11-21）
+    const count = new Map();
+    for (const it of card.data.items) if (it.image) count.set(it.image, (count.get(it.image) ?? 0) + 1);
+    for (const it of card.data.items) if (it.image && count.get(it.image) > 1) delete it.image;
   } else if (PHOTO_FROM_LINK.includes(card.kind) && !card.data.image && card.data.links?.[0]?.url) {
     // リンクを上から順に試し、最初に見つかった見出し画像を使う
     for (const l of card.data.links.slice(0, 3)) {

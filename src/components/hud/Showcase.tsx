@@ -662,8 +662,10 @@ function Emph({ text }: { text: string }) {
 }
 
 /** 外の画像。読めなければ代わりの枠（サイトの名前）を出す */
-function Photo({ src, alt, className }: { src?: string; alt: string; className: string }) {
+function Photo({ src, alt, className, hideOnError = false }: { src?: string; alt: string; className: string; hideOnError?: boolean }) {
   const [bad, setBad] = useState(false);
+  // 読み込めなかった写真の代わりにサイト名だけを出しても情報にならないので、hideOnError のときは何も出さない
+  if ((!src || bad) && hideOnError) return null;
   if (!src || bad)
     return (
       <div className={className + " grid place-items-center bg-gradient-to-br from-cyan-900/60 via-slate-900 to-indigo-950 text-sm text-cyan-300/70"}>
@@ -903,7 +905,10 @@ export function CardBody({
 
 /** ニュースなどの一覧。写真があれば、1 件目を大きく、残りを 2 列の写真つきで並べる */
 function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, title: string) => void }) {
-  const items = card.data.items ?? [];
+  // 同じ画像が 2 件以上に付いているときは、まとめ記事やサイト共通の看板の画像なので出さない（利用者の決まり 2026-11-21: 中身と関係ないトップ画像が並ぶのは意味がない）
+  const seen = new Map<string, number>();
+  for (const it of card.data.items ?? []) if (it.image) seen.set(it.image, (seen.get(it.image) ?? 0) + 1);
+  const items = (card.data.items ?? []).map((it) => (it.image && (seen.get(it.image) ?? 0) > 1 ? { ...it, image: undefined } : it));
   const open = (it: (typeof items)[number]) => it.url && onOpenLink(it.url, it.title);
   const drag = (it: (typeof items)[number]) =>
     it.url
@@ -938,9 +943,9 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
   return (
     <div className="space-y-3">
       <button onClick={() => open(first)} {...drag(first)} title="押すと開きます。カードの外へドラッグすると、これだけのカードにして残します" className="group block w-full text-left">
-        <div className="relative overflow-hidden rounded-lg">
-          <Photo src={first.image} alt={first.url ?? first.title} className="aspect-video w-full" />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-3 pt-10">
+        <div className={first.image ? "relative overflow-hidden rounded-lg" : "rounded-lg border border-cyan-400/20 bg-cyan-400/5"}>
+          {first.image && <Photo src={first.image} alt={first.url ?? first.title} className="aspect-video w-full" hideOnError />}
+          <div className={first.image ? "absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-3 pt-10" : "p-3"}>
             <div className="text-xl font-bold leading-snug text-white group-hover:underline">
               <Emph text={first.title} />
             </div>
@@ -956,7 +961,11 @@ function ListCard({ card, onOpenLink }: { card: Card; onOpenLink: (url: string, 
         <div className="grid grid-cols-2 gap-3">
           {rest.map((it, i) => (
             <button key={i} onClick={() => open(it)} {...drag(it)} title="押すと開きます。カードの外へドラッグすると、これだけのカードにして残します" className="group text-left">
-              <Photo src={it.image} alt={it.url ?? it.title} className="aspect-video w-full rounded-md" />
+              {it.image ? (
+                <Photo src={it.image} alt={it.url ?? it.title} className="aspect-video w-full rounded-md" hideOnError />
+              ) : (
+                <div className="h-1 w-10 rounded bg-cyan-400/40" />
+              )}
               <div className="mt-1 line-clamp-2 text-base font-semibold leading-snug text-cyan-50 group-hover:underline">
                 <Emph text={it.title} />
               </div>
